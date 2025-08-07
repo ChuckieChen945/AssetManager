@@ -1,0 +1,1 @@
+"""AssetManager test suite."""

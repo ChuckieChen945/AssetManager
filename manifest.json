@@ -1,0 +1,26 @@
+{
+    "id": "62e697b3-aeeb-4537-a5d5-a479aee5e7d2",
+    "version": "1.0.0",
+    "platform": "all",
+    "arch": "all",
+    "name": "import",
+    "logo": "/logo.png",
+    "keywords": ["icns"],
+    "devTools": false,
+    "preview": {
+        "zprj,zpac": {
+            "thumbnail": {
+                "path": "thumbnail/others.js",
+                "size": 400
+            },
+            "viewer": {
+                "path": "viewer/others.html"
+            }
+        }
+    },
+    "main": {
+        "url": "index.html",
+        "width": 640,
+        "height": 480
+    }
+}
