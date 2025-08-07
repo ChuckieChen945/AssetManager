@@ -3,23 +3,23 @@
     "version": "1.0.0",
     "platform": "all",
     "arch": "all",
-    "name": "import",
-    "logo": "/logo.png",
+    "name": "AssetManager",
+    "logo": "/src_eagle_plugin/logo.png",
     "keywords": ["icns"],
     "devTools": false,
     "preview": {
         "zprj,zpac": {
             "thumbnail": {
-                "path": "thumbnail/others.js",
+                "path": "/src_eagle_plugin/thumbnail/other_formats.js",
                 "size": 400
             },
             "viewer": {
-                "path": "viewer/others.html"
+                "path": "/src_eagle_plugin/viewer/other_formats.html"
             }
         }
     },
     "main": {
-        "url": "index.html",
+        "url": "/src_eagle_plugin/index.html",
         "width": 640,
         "height": 480
     }
