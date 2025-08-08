@@ -10,6 +10,7 @@ from pathlib import Path
 
 import typer
 from rich.console import Console
+from rich.table import Table
 
 console = Console()
 app = typer.Typer()
@@ -334,6 +335,7 @@ def _root_callback(name: str = typer.Option(None, "--name", help="Echo helper"))
         console.print(name)
 
 
+# TODO: main_assets 中若含有子目录，改为警告，而不是错误
 def validate_structure(root: Path) -> dict[str, list[Path]]:
     """
     验证目录结构并按问题类型分类返回。
@@ -404,26 +406,43 @@ def validate_structure(root: Path) -> dict[str, list[Path]]:
 
 
 def _to_file_uri(p: Path) -> str:
-    # 使用 POSIX 风格，保证 Windows 路径在 URI 中可点击
-    return "file:///" + p.resolve().as_posix()
+    # 使用 Path.as_uri 生成带百分号编码的 file:/// 链接，保证可点击
+    return p.resolve().as_uri()
 
 
 @app.command()
 def validate(path: str) -> None:
-    """验证目录结构是否符合要求（分类输出，带可点击路径）."""
+    """验证目录结构是否符合要求（分类输出，带可点击路径）。"""
     root = Path(path)
     report = validate_structure(root)
 
-    # 是否存在任何问题
-    has_issues = any(report.values()) and any(len(v) > 0 for v in report.values())
-    if not has_issues:
-        print("✅ 所有终端目录均符合要求")
+    # 严重级别分类
+    warning_keys: set[str] = {"main_assets_has_subdirs"}
+    error_keys: set[str] = {
+        "main_assets_multiple_files",
+        "main_assets_empty",
+        "thumbnail_has_subdirs",
+        "thumbnail_multiple_files",
+        "container_has_extra_files",
+        "incorrect_special_structure",
+        "leaf_missing_special",
+    }
+
+    num_errors = sum(len(report.get(k, [])) for k in error_keys)
+    num_warnings = sum(len(report.get(k, [])) for k in warning_keys)
+
+    if num_errors == 0 and num_warnings == 0:
+        console.print("✅ 所有终端目录均符合要求")
         return
 
-    print("验证未通过：")
+    if num_errors > 0:
+        console.print("❌ 验证未通过（存在错误）")
+    else:
+        console.print("⚠️ 验证通过但存在警告")
 
+    # 友好标签
     labels: list[tuple[str, str]] = [
-        ("main_assets_has_subdirs", "main_assets 中存在子目录"),
+        ("main_assets_has_subdirs", "main_assets 中存在子目录（警告）"),
         ("main_assets_multiple_files", "main_assets 中有多个文件"),
         ("main_assets_empty", "main_assets 中没有文件"),
         ("thumbnail_has_subdirs", "thumbnail 中存在子目录"),
@@ -433,10 +452,29 @@ def validate(path: str) -> None:
         ("leaf_missing_special", "叶子目录缺少 main_assets/thumbnail 子目录"),
     ]
 
+    # 概览表（错误/警告计数）
+    summary_table = Table(show_header=True, header_style="bold")
+    summary_table.add_column("级别", style="bold")
+    summary_table.add_column("数量", justify="right")
+    summary_table.add_row("错误", str(num_errors))
+    summary_table.add_row("警告", str(num_warnings))
+    console.print(summary_table)
+
+    # 逐类详情（仅展示有数据的类别）
     for key, title in labels:
         paths = sorted(report.get(key, []))
         if not paths:
             continue
-        console.print(f"- {title}：{len(paths)}")
+
+        level = "警告" if key in warning_keys else "错误"
+        table = Table(show_header=True, header_style="bold")
+        table.title = f"{title}（{level}）: {len(paths)}"
+        table.add_column("原始路径")
+        table.add_column("可点击链接（file:///）")
+
         for p in paths:
-            console.print(f"  {_to_file_uri(p)}")
+            raw_path = str(p.resolve())
+            uri = _to_file_uri(p)
+            table.add_row(raw_path, f"[link={uri}]{uri}[/link]")
+
+        console.print(table)
