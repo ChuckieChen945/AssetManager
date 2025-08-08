@@ -6,6 +6,7 @@ import shutil
 import subprocess
 from collections import defaultdict
 from collections.abc import Iterable
+from multiprocessing import Pool, cpu_count
 from pathlib import Path
 
 import typer
@@ -17,6 +18,9 @@ app = typer.Typer()
 
 COMPRESS_EXTENSIONS = {".zip", ".7z", ".rar"}
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tif", ".tiff", ".webp"}
+GET_THUMBNAIL_SCRIPT_PATH = str(
+    Path(__file__) / "../../../src_eagle_plugin/thumbnail/get_thumbnail.ps1",
+)
 
 
 def ensure_dir(path: Path | str) -> None:
@@ -335,10 +339,9 @@ def _root_callback(name: str = typer.Option(None, "--name", help="Echo helper"))
         console.print(name)
 
 
-# TODO: main_assets 中若含有子目录，改为警告，而不是错误
 def validate_structure(root: Path) -> dict[str, list[Path]]:
     """
-    验证目录结构并按问题类型分类返回。
+    验证目录结构并按问题类型分类返回.
 
     规则概述：
     - 非特殊目录（非 main_assets/thumbnail）：
@@ -364,13 +367,49 @@ def validate_structure(root: Path) -> dict[str, list[Path]]:
         "leaf_missing_special": [],
     }
 
+    def _is_under_directory(path: Path, ancestor_dir_name: str) -> bool:
+        """判断 path 是否位于名为 ancestor_dir_name 的祖先目录之下（不含自身）。"""
+        return any(parent.name == ancestor_dir_name for parent in path.parents)
+
     for folder in root.rglob("*"):
-        if not folder.is_dir():
+        if folder.is_file():
             continue
 
         subdirs = [d for d in folder.iterdir() if d.is_dir()]
         files = [f for f in folder.iterdir() if f.is_file()]
         subdir_names = {d.name for d in subdirs}
+
+        if folder.name == "main_assets":
+            thumbnail_folder = folder.parent / "thumbnail"
+            thumbnail = [f for f in thumbnail_folder.iterdir() if f.is_file()]
+            if len(thumbnail) <= 0:
+                main_file = next(
+                    (f for f in folder.iterdir() if f.is_file() and f.suffix in {".zprj", ".zpac"}),
+                    None,  # 如果没有匹配到，返回 None
+                )
+                if main_file:
+                    console.print(f"为 {main_file} 生成thumbnail...")
+                    result = subprocess.run(
+                        [
+                            "pwsh.exe",
+                            "-File",
+                            GET_THUMBNAIL_SCRIPT_PATH,
+                            "-InputFile",
+                            str(main_file),
+                            "-OutputFile",
+                            str(thumbnail_folder / "thumbnail.png"),
+                            "-NoProfile",
+                            "-NoLogo",
+                        ],
+                        check=False,
+                        capture_output=True,
+                        text=True,
+                    )
+
+                    if result.returncode == 0:
+                        print("✅ 生成成功:", result.stdout.strip())
+                    else:
+                        print("❌ 生成失败:", result.stderr.strip())
 
         if folder.name in {"main_assets", "thumbnail"}:
             # 特殊目录校验
@@ -386,11 +425,15 @@ def validate_structure(root: Path) -> dict[str, list[Path]]:
                 else:
                     categories["thumbnail_multiple_files"].append(folder)
 
-            if folder.name == "main_assets" and len(files) == 0:
+            if folder.name == "main_assets" and len(files) + len(subdirs) == 0:
                 categories["main_assets_empty"].append(folder)
             continue
 
         # 非特殊目录校验
+        # 若该目录在 main_assets 中，则 忽略
+        if _is_under_directory(folder, "main_assets"):
+            continue
+
         if files:
             categories["container_has_extra_files"].append(folder)
 
@@ -478,3 +521,103 @@ def validate(path: str) -> None:
             table.add_row(raw_path, f"[link={uri}]{uri}[/link]")
 
         console.print(table)
+
+
+# ===== 常量配置 =====
+ARCHIVE_SUFFIX = ".7z"
+ARCHIVE_LEVEL = "-mx=9"
+TARGET_FOLDER_NAME = "main_assets"
+
+
+def log(message: str) -> None:
+    """统一日志输出"""
+    print(message)
+
+
+def should_compress(folder: Path) -> bool:
+    """判断是否需要压缩该目录"""
+    if not folder.is_dir():
+        return False
+
+    files = list(folder.iterdir())
+    if len(files) <= 1:
+        log(f"[跳过] {folder} 不需要压缩（文件数 <= 1）")
+        return False
+
+    zip_name = folder / f"{folder.parent.name}{ARCHIVE_SUFFIX}"
+    if zip_name.exists():
+        log(f"[跳过] {zip_name} 已存在")
+        return False
+
+    return True
+
+
+def compress_folder(folder: Path) -> None:
+    """压缩 main_assets 文件夹中的内容（不包含文件夹本身）"""
+    if not should_compress(folder):
+        return
+
+    zip_name = folder / f"{folder.parent.name}{ARCHIVE_SUFFIX}"
+    content_to_compress = [str(item) for item in folder.iterdir()]
+
+    log(f"[压缩中] {folder}")
+
+    try:
+        result = subprocess.run(
+            [
+                "7z",
+                "a",
+                str(zip_name),
+                *content_to_compress,
+                "-r",
+                ARCHIVE_LEVEL,
+            ],
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+
+        if result.returncode != 0:
+            log(f"[失败] 压缩失败：{folder}\n错误信息：{result.stderr}")
+            return
+
+        log(f"[成功] 压缩完成：{zip_name}")
+        _cleanup_original_files(folder, zip_name)
+
+    except Exception as e:
+        log(f"[异常] 压缩异常：{folder}，原因：{e}")
+
+
+def _cleanup_original_files(folder: Path, zip_file: Path) -> None:
+    """清空压缩前的原始内容（保留压缩包和空文件夹）"""
+    try:
+        for item in folder.iterdir():
+            if item.resolve() == zip_file.resolve():
+                continue  # 跳过压缩包自身
+            if item.is_file():
+                item.unlink()
+            elif item.is_dir():
+                shutil.rmtree(item)
+        log(f"[清理完成] 已清空原始内容：{folder}")
+    except Exception as e:
+        log(f"[清理失败] {folder}，原因：{e}")
+
+
+def process(root: Path) -> None:
+    """扫描根目录，查找并处理所有 main_assets 文件夹"""
+    folders = [f for f in root.rglob(TARGET_FOLDER_NAME) if f.is_dir()]
+
+    if not folders:
+        log("[信息] 未找到任何 main_assets 文件夹。")
+        return
+
+    log(f"[发现] 共找到 {len(folders)} 个 main_assets 文件夹，开始处理...")
+    with Pool(processes=cpu_count()) as pool:
+        pool.map(compress_folder, folders)
+
+
+@app.command()
+def compress(root: Path) -> None:
+    """压缩 main_assets 文件夹中的内容（不包含文件夹本身）."""
+    process(root)

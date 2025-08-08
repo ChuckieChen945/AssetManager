@@ -284,13 +284,21 @@ async function importMainAssetsFolder(mainAssetsPath, index, total) {
             try {
                 const parentFolder = path.dirname(mainAssetsPath);
 
-                // FIXME: 这里放入回收站的代码不生效
+                // 你的文件夹路径
+
                 const psCommand = `
 Add-Type -AssemblyName Microsoft.VisualBasic;
-[Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory('${parentFolder}', 'OnlyErrorDialogs', 'SendToRecycleBin')
+[Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory(
+    '${parentFolder.replace(/'/g, "''")}',
+    [Microsoft.VisualBasic.FileIO.UIOption]::OnlyErrorDialogs,
+    [Microsoft.VisualBasic.FileIO.RecycleOption]::SendToRecycleBin
+)
 `;
+
                 exec(
-                    `pwsh -NoProfile -Command "${psCommand}"`,
+                    `pwsh -NoProfile -Command "${psCommand
+                        .replace(/\n/g, " ")
+                        .replace(/"/g, '\\"')}"`,
                     (error, stdout, stderr) => {
                         if (error) {
                             console.error(`出错: ${error.message}`);
@@ -304,7 +312,7 @@ Add-Type -AssemblyName Microsoft.VisualBasic;
                     }
                 );
 
-                addLog(`已删除源文件夹: ${parentFolder}`);
+                console.log(`已删除源文件夹: ${parentFolder}`);
             } catch (error) {
                 addLog(
                     `删除源文件夹失败: ${parentFolder} - ${error.message}`,
