@@ -4,6 +4,7 @@ import concurrent.futures
 import os
 import shutil
 import subprocess
+from collections import defaultdict
 from pathlib import Path
 
 import typer
@@ -11,7 +12,120 @@ from rich import print as rprint
 
 app = typer.Typer()
 
-exts = {".zip", ".7z", ".rar"}
+COMPRESS_EXTENSIONS = {".zip", ".7z", ".rar"}
+IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tif", ".tiff", ".webp"}
+
+
+def ensure_dir(path):
+    """确保目录存在"""
+    Path(path).mkdir(parents=True, exist_ok=True)
+
+
+def fast_move(src, dst):
+    """快速移动文件"""
+    dst_path = Path(dst)
+    ensure_dir(dst_path.parent)
+
+    try:
+        shutil.move(src, dst)
+        print(f"移动: {src} -> {dst}")
+    except Exception as e:
+        print(f"移动失败: {src} -> {dst}, 错误: {e}")
+
+
+def get_name_without_ext(filename):
+    """获取文件名（不含扩展名）"""
+    return Path(filename).stem
+
+
+def is_image_file(filename):
+    """判断是否为图片文件"""
+    return Path(filename).suffix.lower() in IMAGE_EXTENSIONS
+
+
+def organize_files(selected_items, current_dir=None):
+    """
+    组织文件的主要逻辑
+
+    Args:
+        selected_items: 选中的文件/目录列表
+        current_dir: 当前目录（当没有选中项时使用）
+    """
+    if not selected_items:
+        # 没有选中文件，在当前目录创建文件夹
+        if not current_dir:
+            print("错误: 没有选中文件且未提供当前目录")
+            return
+
+        current_path = Path(current_dir)
+        ensure_dir(current_path / "main_assets")
+        ensure_dir(current_path / "thumbnail")
+        print(f"在 {current_dir} 创建了 main_assets 和 thumbnail 目录")
+
+    elif len(selected_items) == 1:
+        # 单个文件
+        file_path = Path(selected_items[0])
+        if not file_path.exists():
+            print(f"错误: 文件不存在 {file_path}")
+            return
+
+        if file_path.is_file():
+            parent_dir = file_path.parent
+            filename = file_path.name
+
+            # 创建目录
+            ensure_dir(parent_dir / "main_assets")
+            ensure_dir(parent_dir / "thumbnail")
+
+            # 移动文件到 main_assets
+            dst_path = parent_dir / "main_assets" / filename
+            fast_move(str(file_path), str(dst_path))
+        else:
+            print(f"跳过目录: {file_path}")
+
+    else:
+        # 多个文件 - 按文件名（无扩展名）分组
+        groups = defaultdict(list)
+
+        for item in selected_items:
+            item_path = Path(item)
+            if not item_path.exists():
+                print(f"警告: 文件不存在 {item_path}")
+                continue
+
+            if item_path.is_file():
+                name_no_ext = get_name_without_ext(item_path.name)
+                groups[name_no_ext].append(item_path)
+            else:
+                print(f"跳过目录: {item_path}")
+
+        # 处理每个分组
+        for name_no_ext, files in groups.items():
+            if not files:
+                continue
+
+            # 使用第一个文件的目录作为基础目录
+            base_dir = files[0].parent
+            new_dir = base_dir / name_no_ext
+
+            # 创建目录结构
+            ensure_dir(new_dir / "main_assets")
+            ensure_dir(new_dir / "thumbnail")
+
+            print(f"处理分组: {name_no_ext}")
+
+            # 移动文件
+            for file_path in files:
+                filename = file_path.name
+
+                if is_image_file(filename):
+                    # 图片文件移动到 thumbnail
+                    dst_path = new_dir / "thumbnail" / filename
+                else:
+                    # 其他文件移动到 main_assets
+                    dst_path = new_dir / "main_assets" / filename
+
+                fast_move(str(file_path), str(dst_path))
 
 
 def move_file_with_check(src_file: Path, dst_dir: Path) -> None:
@@ -99,7 +213,9 @@ def extract_file(file: Path) -> None:
 
 def extract_archives_multithreaded(path: Path) -> None:
     """批量解压."""
-    archive_files = [f for f in path.rglob("*") if f.suffix.lower() in exts and f.is_file()]
+    archive_files = [
+        f for f in path.rglob("*") if f.suffix.lower() in COMPRESS_EXTENSIONS and f.is_file()
+    ]
     print(f"共找到 {len(archive_files)} 个压缩包，开始多线程解压...")
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
@@ -131,7 +247,10 @@ def delete_empty_dirs(path: Path) -> None:
 def extract(path: str) -> None:
     """多线程解压目录中的所有压缩文件."""
     print("📦 开始批量解压...")
+    # TODO： 循环多轮解压。因为解压出来的文件中可能还嵌套有压缩文件。
     extract_archives_multithreaded(Path(path))
+    # 解压出来的文件可能会嵌套相同的文件夹名称、空文件夹等，所以要整理
+    arrange(path)
 
 
 @app.command()
@@ -147,5 +266,25 @@ def arrange(path: str) -> None:
 
 
 @app.command()
-def all_in_one(path: str) -> None:
-    """一次性整理、解压、验证文件夹."""
+def categorize(path: list(str)) -> None:
+    """用于快速将素材分类到 main_assets 和 thumbnail 目录中.
+
+    被 categorization.bat 调用 接收单个文件或多个文件。
+    当接收单个文件时，在当前文件夹下创建 main_assets 和 thumbnail 两个目录，将文件移动到 main_assets 下
+
+    当接收多个文件时：
+    1.将所有选中的文件以文件名相同但扩展名不同两两分组，假设选中的文件为：
+    D:\foo\bar.png
+    D:\foo\bar.zprj
+    D:\foo\aaa.zprj
+    应分组为：
+    组一：
+    D:\foo\bar.png
+    D:\foo\bar.zprj
+    组二：
+    D:\foo\aaa.zprj
+    2.为每个分组创建一个目录，如上述分组应创建 D:\foo\bar 和 D:\foo\aaa 两个目录
+    3.在每个新目录中创建main_assets和thumbnails两个目录
+    4.将每个分组中的图片文件移动到thumbnails目录中，将其他文件移动到main_assets目录中
+    """
+    organize_files(path, current_dir=None)

@@ -13,6 +13,7 @@ globs: **/*.py, src/**/*.py, tests/**/*.py
 - Use the "uv" library to manage the python environment and install the necessary packages.
 - Place static files in `static/` directory
 - Use `templates/` for Jinja2 templates
+- Use pathlib to handle file/directory related operations
 
 ## Code Style
 
