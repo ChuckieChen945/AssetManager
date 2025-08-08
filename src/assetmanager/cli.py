@@ -11,6 +11,7 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
+console = Console()
 app = typer.Typer()
 
 COMPRESS_EXTENSIONS = {".zip", ".7z", ".rar"}
@@ -33,9 +34,9 @@ def fast_move(src: str, dst: str) -> None:
 
     try:
         shutil.move(src, dst)
-        Console.print(f"移动: {src} -> {dst}")
+        console.print(f"移动: {src} -> {dst}")
     except Exception as e:  # noqa: BLE001
-        Console.print(f"移动失败: {src} -> {dst}, 错误: {e}")
+        console.print(f"移动失败: {src} -> {dst}, 错误: {e}")
 
 
 def get_name_without_ext(filename: str) -> str:
@@ -48,8 +49,69 @@ def is_image_file(filename: str) -> bool:
     return Path(filename).suffix.lower() in IMAGE_EXTENSIONS
 
 
-# TODO: RuffC901: `organize_files` is too complex (13 > 10)
-def organize_files(selected_items: Iterable[str], current_dir: str | None = None) -> None:
+def _ensure_asset_dirs(base_dir: Path) -> None:
+    ensure_dir(base_dir / "main_assets")
+    ensure_dir(base_dir / "thumbnail")
+
+
+def _handle_no_selection(current_dir: str) -> None:
+    current_path = Path(current_dir)
+    _ensure_asset_dirs(current_path)
+    console.print(f"在 {current_dir} 创建了 main_assets 和 thumbnail 目录")
+
+
+def _handle_single_path(file_path: Path) -> None:
+    if not file_path.exists():
+        console.print(f"错误: 文件不存在 {file_path}")
+        return
+
+    if file_path.is_file():
+        parent_dir = file_path.parent
+        _ensure_asset_dirs(parent_dir)
+        dst_path = parent_dir / "main_assets" / file_path.name
+        fast_move(str(file_path), str(dst_path))
+    else:
+        console.print(f"跳过目录: {file_path}")
+
+
+def _group_selected_files(selected_items_list: list[str]) -> dict[str, list[Path]]:
+    groups: dict[str, list[Path]] = defaultdict(list)
+    for item in selected_items_list:
+        item_path = Path(item)
+        if not item_path.exists():
+            console.print(f"警告: 文件不存在 {item_path}")
+            continue
+        if item_path.is_file():
+            name_no_ext = get_name_without_ext(item_path.name)
+            groups[name_no_ext].append(item_path)
+        else:
+            console.print(f"跳过目录: {item_path}")
+    return groups
+
+
+def _handle_multiple(selected_items_list: list[str]) -> None:
+    groups = _group_selected_files(selected_items_list)
+
+    for name_no_ext, files in groups.items():
+        if not files:
+            continue
+
+        base_dir = files[0].parent
+        new_dir = base_dir / name_no_ext
+
+        _ensure_asset_dirs(new_dir)
+        console.print(f"处理分组: {name_no_ext}")
+
+        for file_path in files:
+            filename = file_path.name
+            if is_image_file(filename):
+                dst_path = new_dir / "thumbnail" / filename
+            else:
+                dst_path = new_dir / "main_assets" / filename
+            fast_move(str(file_path), str(dst_path))
+
+
+def organize_files(selected_items: Iterable[str]) -> None:
     """
     组织文件的主要逻辑.
 
@@ -57,82 +119,15 @@ def organize_files(selected_items: Iterable[str], current_dir: str | None = None
         selected_items: 选中的文件/目录列表
         current_dir: 当前目录（当没有选中项时使用）
     """
-    selected_items_list = list(selected_items)
+    selected_items_list = list(selected_items) if selected_items is not None else []
+
     if not selected_items_list:
-        # 没有选中文件，在当前目录创建文件夹
-        if not current_dir:
-            Console.print("错误: 没有选中文件且未提供当前目录")
-            return
+        return
+    if len(selected_items_list) == 1:
+        _handle_single_path(Path(selected_items_list[0]))
+        return
 
-        current_path = Path(current_dir)
-        ensure_dir(current_path / "main_assets")
-        ensure_dir(current_path / "thumbnail")
-        Console.print(f"在 {current_dir} 创建了 main_assets 和 thumbnail 目录")
-
-    elif len(selected_items_list) == 1:
-        # 单个文件
-        file_path = Path(selected_items_list[0])
-        if not file_path.exists():
-            Console.print(f"错误: 文件不存在 {file_path}")
-            return
-
-        if file_path.is_file():
-            parent_dir = file_path.parent
-            filename = file_path.name
-
-            # 创建目录
-            ensure_dir(parent_dir / "main_assets")
-            ensure_dir(parent_dir / "thumbnail")
-
-            # 移动文件到 main_assets
-            dst_path = parent_dir / "main_assets" / filename
-            fast_move(str(file_path), str(dst_path))
-        else:
-            Console.print(f"跳过目录: {file_path}")
-
-    else:
-        # 多个文件 - 按文件名（无扩展名）分组
-        groups: dict[str, list[Path]] = defaultdict(list)
-
-        for item in selected_items_list:
-            item_path = Path(item)
-            if not item_path.exists():
-                Console.print(f"警告: 文件不存在 {item_path}")
-                continue
-
-            if item_path.is_file():
-                name_no_ext = get_name_without_ext(item_path.name)
-                groups[name_no_ext].append(item_path)
-            else:
-                Console.print(f"跳过目录: {item_path}")
-
-        # 处理每个分组
-        for name_no_ext, files in groups.items():
-            if not files:
-                continue
-
-            # 使用第一个文件的目录作为基础目录
-            base_dir = files[0].parent
-            new_dir = base_dir / name_no_ext
-
-            # 创建目录结构
-            ensure_dir(new_dir / "main_assets")
-            ensure_dir(new_dir / "thumbnail")
-
-            Console.print(f"处理分组: {name_no_ext}")
-
-            # 移动文件
-            for file_path in files:
-                filename = file_path.name
-
-                if is_image_file(filename):
-                    # 图片文件移动到 thumbnail
-                    dst_path = new_dir / "thumbnail" / filename
-                else:
-                    # 其他文件移动到 main_assets
-                    dst_path = new_dir / "main_assets" / filename
-
-                fast_move(str(file_path), str(dst_path))
+    _handle_multiple(selected_items_list)
 
 
 def move_file_with_check(src_file: Path, dst_dir: Path) -> None:
@@ -141,7 +136,7 @@ def move_file_with_check(src_file: Path, dst_dir: Path) -> None:
 
     if dst_file.exists():
         if src_file.stat().st_size == dst_file.stat().st_size:
-            Console.print(f"⚠️ 同名文件大小相同，删除源文件: {src_file}")
+            console.print(f"⚠️ 同名文件大小相同，删除源文件: {src_file}")
             src_file.unlink()
         else:
             base = src_file.stem
@@ -151,13 +146,13 @@ def move_file_with_check(src_file: Path, dst_dir: Path) -> None:
                 new_name = f"{base}_{i}{ext}"
                 new_dst = dst_dir / new_name
                 if not new_dst.exists():
-                    Console.print(f"⚠️ 同名文件大小不同，重命名为: {new_dst}")
+                    console.print(f"⚠️ 同名文件大小不同，重命名为: {new_dst}")
                     shutil.move(str(src_file), str(new_dst))
                     break
                 i += 1
     else:
         shutil.move(str(src_file), str(dst_file))
-        Console.print(f"移动文件: {src_file.name}")
+        console.print(f"移动文件: {src_file.name}")
 
 
 def merge_directories(src_dir: Path, dst_dir: Path) -> None:
@@ -174,23 +169,23 @@ def merge_directories(src_dir: Path, dst_dir: Path) -> None:
         if sub_dir.is_dir():
             target_sub = dst_dir / sub_dir.name
             if target_sub.exists():
-                Console.print(f"⚠️ 已存在同名目录: {target_sub} -> 合并中")
+                console.print(f"⚠️ 已存在同名目录: {target_sub} -> 合并中")
                 merge_directories(sub_dir, target_sub)
             else:
                 shutil.move(str(sub_dir), str(target_sub))
-                Console.print(f"移动目录: {sub_dir.name}")
+                console.print(f"移动目录: {sub_dir.name}")
 
     # 清理空目录
     if not any(src_dir.iterdir()):
         src_dir.rmdir()
-        Console.print(f"🗑️ 删除空目录: {src_dir}")
+        console.print(f"🗑️ 删除空目录: {src_dir}")
 
 
 def fix_duplicate_named_dirs(path: Path) -> None:
     """fix_duplicate_named_dirs."""
     for dir in sorted(path.rglob("*"), reverse=True):
         if dir.is_dir() and dir.parent.name == dir.name:
-            Console.print(f"发现重复目录: {dir}")
+            console.print(f"发现重复目录: {dir}")
             merge_directories(dir, dir.parent)
 
 
@@ -208,14 +203,14 @@ def extract_file(file: Path) -> None:
             text=True,
         )
         if result.returncode == 0:
-            Console.print(f"✅ 解压完成: {file.name}")
+            console.print(f"✅ 解压完成: {file.name}")
             file.unlink()
-            Console.print(f"🗑️ 已删除压缩包: {file}")
+            console.print(f"🗑️ 已删除压缩包: {file}")
         else:
-            Console.print(f"❌ 解压失败: {file}")
-            Console.print(result.stderr)
+            console.print(f"❌ 解压失败: {file}")
+            console.print(result.stderr)
     except Exception as e:  # noqa: BLE001
-        Console.print(f"❌ 异常解压: {file} - {e}")
+        console.print(f"❌ 异常解压: {file} - {e}")
 
 
 def _find_archive_files(path: Path) -> list[Path]:
@@ -228,7 +223,7 @@ def _extract_round(path: Path) -> int:
     if not archive_files:
         return 0
 
-    Console.print(f"共找到 {len(archive_files)} 个压缩包，开始多线程解压...")
+    console.print(f"共找到 {len(archive_files)} 个压缩包，开始多线程解压...")
     with concurrent.futures.ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
         list(executor.map(extract_file, archive_files))
     return len(archive_files)
@@ -239,12 +234,12 @@ def delete_useless_files_and_dirs(path: Path) -> None:
     # 删除所有 __MACOSX 文件夹
     for dir in path.rglob("*"):
         if dir.is_dir() and dir.name == "__MACOSX":
-            Console.print(f"🗑️ 删除无用目录: {dir}")
+            console.print(f"🗑️ 删除无用目录: {dir}")
             shutil.rmtree(dir, ignore_errors=True)
 
     # 删除所有 ._Thumbs.db 文件
     for file in path.rglob("._Thumbs.db"):
-        Console.print(f"🗑️ 删除无用文件: {file}")
+        console.print(f"🗑️ 删除无用文件: {file}")
         file.unlink(missing_ok=True)
 
 
@@ -252,7 +247,7 @@ def delete_empty_dirs(path: Path) -> None:
     """删除空目录."""
     for dir in sorted(path.rglob("*"), reverse=True):
         if dir.is_dir() and not any(dir.iterdir()):
-            Console.print(f"🗑️ 删除空目录: {dir}")
+            console.print(f"🗑️ 删除空目录: {dir}")
             dir.rmdir()
 
 
@@ -260,7 +255,7 @@ def delete_empty_dirs(path: Path) -> None:
 def extract(path: str) -> None:
     """多轮解压目录中的所有压缩文件，并在最后整理."""
     target = Path(path)
-    Console.print("📦 开始批量解压...")
+    console.print("📦 开始批量解压...")
 
     total_round = 0
     total_archives = 0
@@ -272,7 +267,7 @@ def extract(path: str) -> None:
         total_archives += extracted
         # 解压一轮后，可能产生新的压缩包，继续下一轮
 
-    Console.print(f"📦 解压完成，共 {total_round} 轮，处理压缩包 {total_archives} 个")
+    console.print(f"📦 解压完成，共 {total_round} 轮，处理压缩包 {total_archives} 个")
     # 解压出来的文件可能会嵌套相同的文件夹名称、空文件夹等，所以要整理
     arrange(path)
 
@@ -281,12 +276,12 @@ def extract(path: str) -> None:
 def arrange(path: str) -> None:
     """整理目录."""
     path_ = Path(path)
-    Console.print("🧹 开始清理无用文件...")
+    console.print("🧹 开始清理无用文件...")
     delete_useless_files_and_dirs(path_)
-    Console.print("📁 合并重复目录...")
+    console.print("📁 合并重复目录...")
     fix_duplicate_named_dirs(path_)
     delete_empty_dirs(path_)
-    Console.print("✅ 所有操作已完成")
+    console.print("✅ 所有操作已完成")
 
 
 @app.command()
@@ -315,5 +310,18 @@ def categorize(paths: list[Path] = typer.Argument(None)) -> None:
     4.将每个分组中的图片文件移动到thumbnails目录中，将其他文件移动到main_assets目录中
     """
     # Typer 会在没有传参时传入 None
-    selected = [str(p) for p in paths] if paths is not None else []
-    organize_files(selected, current_dir=None)
+    selected = paths if paths is not None else []
+
+    # 判断传入的路径是目录还是文件
+    dirs = [p for p in selected if p.is_dir()]
+    files = [p for p in selected if p.is_file()]
+
+    if dirs and not files:
+        # 一次只能有一个path
+        dir_path = Path(dirs[0])  # 假设 dirs[0] 是你目标目录路径
+        # 列出目录中所有文件（不包括子目录）
+        files_in_dir = [p for p in dir_path.iterdir() if p.is_file()]
+        organize_files(selected_items=files_in_dir)
+    else:
+        # 只有文件
+        organize_files(selected_items=files)

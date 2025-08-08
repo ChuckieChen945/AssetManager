@@ -1,20 +1,16 @@
 @echo off
 setlocal
 
-REM ä¼˜å…ˆä½¿ç”¨é¡¹ç›®æ ¹ä¸‹ .venv ä¸­çš„ assetmanager.exe
 set "VENV_EXE=%~dp0..\..\.venv\Scripts\assetmanager.exe"
 
+echo ÕıÔÚ²éÕÒ assetmanager ¿ÉÖ´ĞĞÎÄ¼ş...
 if exist "%VENV_EXE%" (
+  echo ÕÒµ½¿ÉÖ´ĞĞÎÄ¼ş£¬¿ªÊ¼Ö´ĞĞÃüÁî...
   "%VENV_EXE%" categorize %*
-  goto :eof
+  echo ÃüÁîÖ´ĞĞÍê±Ï¡£
+) else (
+  echo Î´ÕÒµ½ assetmanager ¿ÉÖ´ĞĞÎÄ¼ş¡£ÇëÏÈ°²×°»ò´´½¨ĞéÄâ»·¾³¡£
 )
 
-REM å›é€€åˆ°å…¨å±€å®‰è£…çš„ assetmanagerï¼ˆä¾‹å¦‚ç» uv/hatch å®‰è£…åï¼‰
-where assetmanager >nul 2>nul
-if %errorlevel%==0 (
-  assetmanager categorize %*
-  goto :eof
-)
-
-echo æœªæ‰¾åˆ° assetmanager å¯æ‰§è¡Œæ–‡ä»¶ã€‚è¯·å…ˆå®‰è£…æˆ–åˆ›å»ºè™šæ‹Ÿç¯å¢ƒã€‚
-exit /b 1
+echo.
+@REM pause
