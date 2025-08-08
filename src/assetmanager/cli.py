@@ -325,3 +325,48 @@ def categorize(paths: list[Path] = typer.Argument(None)) -> None:
     else:
         # 只有文件
         organize_files(selected_items=files)
+
+
+def validate_structure(root: Path) -> list[str]:
+    """
+    验证目录结构：所有叶子目录必须包含 main_assets 和 thumbnail 文件夹.
+    """
+    errors = []
+
+    # 遍历所有目录
+    for folder in root.rglob("*"):
+        if folder.is_dir():
+            subdirs = [d for d in folder.iterdir() if d.is_dir()]
+            files = [f for f in folder.iterdir() if f.is_file()]
+            if folder.name in {"main_assets", "thumbnail"}:
+                if subdirs:
+                    errors.append(f"❌ {folder} 中有子目录")
+                if len(files) > 1:
+                    errors.append(f"❌ {folder} 中有多个文件")
+                if folder.name == "main_assets" and len(files) == 0:
+                    errors.append(f"❌ {folder} 中没有文件")
+            else:
+                if files:
+                    errors.append(f"❌ {folder} 中有多余的文件")
+                if "main_assets" in subdirs or "thumbnail" in subdirs:
+                    expected = {"main_assets", "thumbnail"}
+                    subdir_names = {d.name for d in subdirs}
+                    if subdir_names != expected:
+                        errors.append(f"❌ {folder} 结构不正确，含有多余的目录")
+                if not subdirs:
+                    errors.append(f"❌ {folder} 为空")
+
+    return errors
+
+
+@app.command()
+def validate(path: str) -> None:
+    """验证目录结构是否符合要求."""
+    problems = validate_structure(Path(path))
+
+    if problems:
+        print("验证未通过：")
+        for p in problems:
+            print(p)
+    else:
+        print("✅ 所有终端目录均符合要求")
