@@ -21,6 +21,7 @@ IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tif", ".tiff", ".
 GET_THUMBNAIL_SCRIPT_PATH = str(
     Path(__file__) / "../../../src_eagle_plugin/thumbnail/get_thumbnail.ps1",
 )
+VIDEO_EXTENSIONS = {".mp4", ".srt", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm"}
 
 
 def ensure_dir(path: Path | str) -> None:
@@ -73,8 +74,19 @@ def _handle_single_path(file_path: Path) -> None:
     if file_path.is_file():
         parent_dir = file_path.parent
         _ensure_asset_dirs(parent_dir)
-        dst_path = parent_dir / "main_assets" / file_path.name
+
+        if file_path.suffix.lower() in IMAGE_EXTENSIONS:
+            dst_path = parent_dir / "thumbnail" / file_path.name
+        else:
+            dst_path = parent_dir / "main_assets" / file_path.name
         fast_move(str(file_path), str(dst_path))
+
+        if file_path.suffix.lower() in IMAGE_EXTENSIONS:
+            # 将 parent_dir 下除 thumbnail 和 main_assets 以外的所有其它内容（包括文件和文件夹） 移到 main_assets 中
+            for path in parent_dir.iterdir():
+                if path.name not in {"thumbnail", "main_assets"}:
+                    shutil.move(str(path), str(parent_dir / "main_assets" / path.name))
+
     else:
         console.print(f"跳过目录: {file_path}")
 
@@ -244,6 +256,11 @@ def delete_useless_files_and_dirs(path: Path) -> None:
 
     # 删除所有 ._Thumbs.db 文件
     for file in path.rglob("._Thumbs.db"):
+        console.print(f"🗑️ 删除无用文件: {file}")
+        file.unlink(missing_ok=True)
+
+    # 删除所有 .DS_Store 文件
+    for file in path.rglob(".DS_Store"):
         console.print(f"🗑️ 删除无用文件: {file}")
         file.unlink(missing_ok=True)
 
@@ -457,6 +474,10 @@ def _to_file_uri(p: Path) -> str:
 def validate(path: str) -> None:
     """验证目录结构是否符合要求（分类输出，带可点击路径）。"""
     root = Path(path)
+    # 查找root下是否有 .mp4 文件或 .srt 字幕文件
+    videos = [f for f in root.iterdir() if f.suffix.lower() in VIDEO_EXTENSIONS]
+    for video in videos:
+        console.print(f"❌ 目录中存在视频文件: {video}")
     report = validate_structure(root)
 
     # 严重级别分类
@@ -613,7 +634,8 @@ def process(root: Path) -> None:
         return
 
     log(f"[发现] 共找到 {len(folders)} 个 main_assets 文件夹，开始处理...")
-    with Pool(processes=cpu_count()) as pool:
+    # with Pool(processes=int(cpu_count() / 2)) as pool:
+    with Pool(processes=3) as pool:
         pool.map(compress_folder, folders)
 
 
