@@ -16,6 +16,11 @@
             "viewer": {
                 "path": "/src_eagle_plugin/viewer/other_formats.html"
             }
+        },
+        "priv": {
+            "viewer": {
+                "path": "/src_eagle_plugin/viewer/priv.html"
+            }
         }
     },
     "main": {
