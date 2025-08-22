@@ -102,9 +102,12 @@
             // 3. 缩放和平移逻辑
             let scale = 1;
             let isDragging = false;
-            let startX, startY;
+            let startX = 0,
+                startY = 0;
             let offsetX = 0,
                 offsetY = 0;
+            let initialOffsetX = 0,
+                initialOffsetY = 0;
 
             container.addEventListener("wheel", (e) => {
                 e.preventDefault();
@@ -115,18 +118,15 @@
             });
 
             container.addEventListener("mousedown", (e) => {
+                e.preventDefault(); // 防止选中文本
                 isDragging = true;
                 startX = e.clientX - offsetX;
                 startY = e.clientY - offsetY;
                 container.style.cursor = "grabbing";
             });
 
-            container.addEventListener("mouseup", () => {
-                isDragging = false;
-                container.style.cursor = "grab";
-            });
-
-            container.addEventListener("mouseleave", () => {
+            window.addEventListener("mouseup", () => {
+                // 改成 window，确保拖出容器也能停止
                 isDragging = false;
                 container.style.cursor = "grab";
             });
@@ -135,7 +135,12 @@
                 if (!isDragging) return;
                 offsetX = e.clientX - startX;
                 offsetY = e.clientY - startY;
-                updateTransform();
+                updateTransform(); // 实时更新
+            });
+
+            container.addEventListener("mouseleave", () => {
+                isDragging = false;
+                container.style.cursor = "grab";
             });
 
             function updateTransform() {
