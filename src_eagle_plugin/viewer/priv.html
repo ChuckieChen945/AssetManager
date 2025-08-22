@@ -1,0 +1,109 @@
+<html>
+    <head>
+        <meta charset="UTF-8" />
+        <title>priv Viewer</title>
+        <style>
+            html,
+            body {
+                margin: 0;
+                padding: 0;
+                overflow: hidden;
+            }
+            #viewer {
+                pointer-events: none;
+                object-fit: contain;
+                object-position: center;
+                width: 100%;
+                height: 100%;
+                max-width: 100vw;
+                max-height: 100vh;
+            }
+        </style>
+    </head>
+    <body>
+        <img id="viewer" />
+        <script>
+            const { execFile } = require("child_process");
+            const fs = require("fs");
+            const path = require("path");
+            const os = require("os");
+
+            const urlParams = new URLSearchParams(window.location.search);
+            const filePath = urlParams.get("path"); // e.g., F:\eagle_librarys\images\ME70CKETW521F.info\myfile.priv
+
+            const viewer = document.querySelector("#viewer");
+
+            // 1. 先显示缩略图
+            viewer.src = filePath.replace(".priv", "_thumbnail.png");
+
+            // 2. 加载真实图片
+            (async function () {
+                try {
+                    const cacheDir = path.join(
+                        os.tmpdir(),
+                        "eagle_images_cache"
+                    );
+                    if (!fs.existsSync(cacheDir)) {
+                        fs.mkdirSync(cacheDir, { recursive: true });
+                    }
+
+                    // 从路径中提取唯一ID，假设路径形如 ...\ME70CKETW521F.info\myfile.priv
+                    const match = filePath.match(/([A-Z0-9]+)\.info/);
+                    if (!match) throw new Error("无法从路径中解析ID");
+                    const uniqueId = match[1];
+
+                    const cachedFile = path.join(
+                        cacheDir,
+                        uniqueId +
+                            path.extname(filePath).replace(".priv", ".png")
+                    ); // 缓存文件名
+                    if (fs.existsSync(cachedFile)) {
+                        viewer.src = cachedFile;
+                        return;
+                    }
+
+                    // 临时解压路径
+                    const tempExtractDir = path.join(
+                        cacheDir,
+                        uniqueId + "_tmp"
+                    );
+                    if (!fs.existsSync(tempExtractDir)) {
+                        fs.mkdirSync(tempExtractDir, { recursive: true });
+                    }
+
+                    // 用7z解压，假设压缩包里只有一张图片
+                    execFile(
+                        "7z",
+                        ["e", "-y", filePath, "-o" + tempExtractDir],
+                        (err) => {
+                            if (err) {
+                                console.error("解压失败:", err);
+                                return;
+                            }
+
+                            const files = fs.readdirSync(tempExtractDir);
+                            if (files.length !== 1) {
+                                console.error("压缩包中不止一张图片");
+                                return;
+                            }
+
+                            const extractedFile = path.join(
+                                tempExtractDir,
+                                files[0]
+                            );
+
+                            // 移动到缓存目录
+                            fs.renameSync(extractedFile, cachedFile);
+                            fs.rmdirSync(tempExtractDir, { recursive: true });
+
+                            // 显示图片
+                            viewer.src = cachedFile;
+                        }
+                    );
+                } catch (e) {
+                    console.error(e);
+                }
+            })();
+        </script>
+    </body>
+</html>
