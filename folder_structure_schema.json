@@ -1,0 +1,108 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "3D Assets Folder Structure",
+  "type": "object",
+  "properties": {
+    "root": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "directory"
+          ]
+        },
+        "children": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/node"
+          }
+        }
+      },
+      "required": [
+        "name",
+        "path",
+        "type"
+      ]
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "total_folders": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "total_files": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "scan_date": {
+          "type": "string"
+        },
+        "root_path": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "required": [
+    "root"
+  ],
+  "definitions": {
+    "node": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "file",
+            "directory"
+          ]
+        },
+        "size": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "children": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/node"
+          }
+        }
+      },
+      "required": [
+        "name",
+        "path",
+        "type"
+      ],
+      "if": {
+        "properties": {
+          "type": {
+            "const": "directory"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "children": {
+            "type": "array"
+          }
+        }
+      }
+    }
+  }
+}
