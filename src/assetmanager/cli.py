@@ -250,7 +250,7 @@ def delete_useless_files_and_dirs(path: Path) -> None:
     """删除无用文件."""
     # 删除所有 __MACOSX 文件夹
     for dir in path.rglob("*"):
-        if dir.is_dir() and dir.name == "__MACOSX":
+        if dir.is_dir() and (dir.name == "__MACOSX" or dir.name == ".alg_meta"):
             console.print(f"🗑️ 删除无用目录: {dir}")
             shutil.rmtree(dir, ignore_errors=True)
 
