@@ -6,6 +6,7 @@ Substance Painter 插件
 
 import shutil
 import struct
+import subprocess
 import time
 import zipfile
 from pathlib import Path
@@ -49,25 +50,50 @@ def log_error(msg: str) -> None:
 
 def extract_single_image(zip_path: Path) -> bool:
     """
-    从 zip 格式的 .sbsar 文件中提取单张图片。
+    使用 7z 从 .sbsar (zip 格式) 文件中提取单张图片。
     仅当压缩包里有且只有一张图片时才会成功。
     """
     try:
-        with zipfile.ZipFile(zip_path, "r") as zf:
-            images = [f for f in zf.namelist() if Path(f).suffix.lower() in IMAGE_EXTS]
+        # 1. 列出压缩包内容
+        result = subprocess.run(
+            ["7z", "l", str(zip_path)],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        output = result.stdout
 
-            if len(images) != 1:
-                log_error(f"{zip_path} 中图片数量不是 1，而是 {len(images)}")
-                return False
+        # 2. 解析文件列表
+        images = []
+        for line in output.splitlines():
+            parts = line.strip().split()
+            if len(parts) < 6:
+                continue
+            filename = parts[-1]
+            if Path(filename).suffix.lower() in IMAGE_EXTS:
+                images.append(filename)
 
-            image_file = images[0]
-            output_path = zip_path.with_suffix(Path(image_file).suffix.lower())
+        if len(images) != 1:
+            log_error(f"{zip_path} 中图片数量不是 1，而是 {len(images)}")
+            return False
 
-            with zf.open(image_file) as src, output_path.open("wb") as dst:
-                dst.write(src.read())
+        image_file = images[0]
+        output_path = zip_path.with_suffix(Path(image_file).suffix.lower())
 
-            log_info(f"已提取图片到: {output_path}")
-            return True
+        # 3. 解压目标文件到指定目录
+        subprocess.run(
+            ["7z", "e", str(zip_path), image_file, f"-o{zip_path.parent}", "-y"],
+            check=True,
+        )
+
+        # 4. 重命名为和 zip 一致的文件名
+        extracted_file = zip_path.parent / Path(image_file).name
+        if extracted_file.exists():
+            extracted_file.rename(output_path)
+
+        log_info(f"已提取图片到: {output_path}")
+        return True
+
     except Exception as e:
         log_error(f"提取失败 {zip_path}: {e}")
         return False
