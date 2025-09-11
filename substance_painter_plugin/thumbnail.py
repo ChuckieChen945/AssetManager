@@ -1,10 +1,13 @@
-""" Substance Painter 插件: 用于从 AppData/Roaming/Adobe/Adobe Substance 3D Painter/previews  批量提取 .spsm 文件的缩略图
+"""Substance Painter 插件.
+
+ 用于从 AppData/Roaming/Adobe/Adobe Substance 3D Painter/previews
+批量提取 .spsm 文件的缩略图
 """
 
-from pathlib import Path
 import shutil
 import struct
 import time
+from pathlib import Path
 
 import substance_painter.resource as spr
 import substance_painter.ui
@@ -16,7 +19,8 @@ plugin_widgets = []
 # Substance Painter 的预览目录
 PREVIEW_DIR = Path.home() / "AppData/Roaming/Adobe/Adobe Substance 3D Painter/previews"
 
-def repair_webp(input_file_path, output_file_path):
+
+def repair_webp(input_file_path, output_file_path) -> bool:
     """
     修复具有错误头偏移的 .webp 文件。
     """
@@ -43,8 +47,8 @@ def repair_webp(input_file_path, output_file_path):
         return False
 
 
-def clear_previews():
-    """清理 Substance Painter 的预览目录"""
+def clear_previews() -> None:
+    """清理 Substance Painter 的预览目录."""
     if PREVIEW_DIR.exists():
         for f in PREVIEW_DIR.iterdir():
             try:
@@ -56,13 +60,18 @@ def clear_previews():
                 print(f"⚠️ 删除预览文件失败 {f}: {e}")
 
 
-def get_new_preview():
+def get_new_preview(resource: spr.Resource) -> None | Path:
     """
-    在预览目录中查找生成的缩略图。
+    在预览目录中查找生成的缩略图.
+
     - Substance Painter 在 import 后会生成 1-2 个文件:
       - cache_data （缓存）
       - 另一个 .webp 文件（就是缩略图）
     """
+    # TODO: 优化逻辑，多次尝试触发生成缩略图
+    clear_previews()
+    # 触发生成缩略图
+    resource.reset_preview()
     for i in range(10):  # 最多等待 10 秒
         previews = list(PREVIEW_DIR.iterdir())
         previews = [p for p in previews if p.is_file() and p.name != "cache_data"]
@@ -74,35 +83,36 @@ def get_new_preview():
     return None
 
 
-def start_plugin():
-    """插件启动"""
+def start_plugin() -> None:
+    """插件启动."""
     folder = QtWidgets.QFileDialog.getExistingDirectory(
-        None, "选择包含 .spsm 的文件夹", str(Path.home())
+        None,
+        "选择包含 .spsm/.sbsar 的文件夹",
+        str(Path.home()),
     )
     if not folder:
         return
 
     folder_path = Path(folder)
-    spsm_files = list(folder_path.glob("*.spsm"))
+    spsm_files = list(folder_path.glob("**/*.spsm"))
+    sbsar_files = list(folder_path.glob("**/*.sbsar"))
 
-    if not spsm_files:
-        QtWidgets.QMessageBox.information(None, "提示", "所选文件夹下没有找到 .spsm 文件")
+    all_files = spsm_files + sbsar_files
+
+    if not all_files:
+        QtWidgets.QMessageBox.information(None, "提示", "所选文件夹下没有找到 .spsm/.sbsar 文件")
         return
 
-    for spsm_file in spsm_files:
+    for spsm_file in all_files:
         try:
+            # TODO：如果文件相同路径下已有 .webp 缩略图，则跳过
             print(f"\n📦 正在处理: {spsm_file.name}")
 
-            # 1. 清理旧预览
-            clear_previews()
-
-            # 2. 导入资源（触发 Substance Painter 生成缩略图）
+            # 2. 导入资源
             resource = spr.import_session_resource(str(spsm_file), spr.Usage.SMART_MATERIAL)
-            # 生成缩略图
-            resource.reset_preview()
 
-            # # 3. 获取新缩略图
-            preview_file = get_new_preview()
+            #  3. 获取新缩略图
+            preview_file = get_new_preview(resource)
             if not preview_file:
                 print(f"❌ 未生成缩略图，请尝试重启软件: {spsm_file.name}")
                 continue
