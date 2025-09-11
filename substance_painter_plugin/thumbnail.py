@@ -79,11 +79,18 @@ def extract_single_image(zip_path: Path) -> bool:
 
         image_file = images[0]
         output_path = zip_path.with_suffix(Path(image_file).suffix.lower())
+        si = subprocess.STARTUPINFO()
+        si.dwFlags |= subprocess.STARTF_USESHOWWINDOW  # 隐藏窗口
 
         # 3. 解压目标文件到指定目录
         subprocess.run(
             ["7z", "e", str(zip_path), image_file, f"-o{zip_path.parent}", "-y"],
             check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags = subprocess.CREATE_NO_WINDOW,
+            startupinfo=si
+
         )
 
         # 4. 重命名为和 zip 一致的文件名
@@ -167,8 +174,6 @@ def get_new_preview(resource: spr.Resource, timeout: int = 10, retry: bool = Tru
         log_info("⏳ 尝试再次生成")
         preview = try_generate()
 
-    if not preview:
-        log_error("未生成缩略图")
     return preview
 
 
@@ -225,6 +230,7 @@ def start_plugin() -> None:
             resource = spr.import_session_resource(str(file_path), usage)
             preview_file = get_new_preview(resource)
             if not preview_file:
+                log_error(f"未生成预览，跳过: {file_path}")
                 skipped.append(file_path.name)
                 continue
 
