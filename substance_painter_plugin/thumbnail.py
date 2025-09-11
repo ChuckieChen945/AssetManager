@@ -56,19 +56,41 @@ def clear_previews() -> None:
                 print(f"⚠️ 删除预览文件失败 {f}: {e}")
 
 
-def get_new_preview(resource: spr.Resource, timeout=10) -> None | Path:
-    """在预览目录中查找生成的缩略图"""
+def get_new_preview(resource: spr.Resource, timeout=10, retry_if_multiple=True) -> None | Path:
+    """在预览目录中查找生成的缩略图，优化逻辑以提高成功率"""
+
+    def get_preview_files():
+        return [p for p in PREVIEW_DIR.iterdir() if p.is_file() and p.name != "cache_data"]
+
     clear_previews()
     resource.reset_preview()
 
     for _ in range(timeout):
-        previews = [p for p in PREVIEW_DIR.iterdir() if p.is_file() and p.name != "cache_data"]
+        previews = get_preview_files()
         if len(previews) == 1:
             return previews[0]
+
         if len(previews) > 1:
             print("⚠️ 出现多个预览文件，无法确定正确缩略图")
-            return None
+            break
+
         time.sleep(1)
+
+    # 超时后重试一次（可选）
+    if retry_if_multiple:
+        print("⏳ 尝试再次生成")
+        clear_previews()
+        resource.reset_preview()
+        for _ in range(timeout):
+            previews = get_preview_files()
+            if len(previews) == 1:
+                return previews[0]
+
+            if len(previews) > 1:
+                print("⚠️ 出现多个预览文件，无法确定正确缩略图")
+                return None
+
+    print("❌ 未生成缩略图")
     return None
 
 
@@ -85,7 +107,8 @@ def start_plugin() -> None:
     folder_path = Path(folder)
     spsm_files = list(folder_path.glob("**/*.spsm"))
     sbsar_files = list(folder_path.glob("**/*.sbsar"))
-    all_files = spsm_files + sbsar_files
+    sppr_files = list(folder_path.glob("**/*.sppr"))
+    all_files = spsm_files + sbsar_files + sppr_files
 
     if not all_files:
         QtWidgets.QMessageBox.information(None, "提示", "所选文件夹下没有找到 .spsm/.sbsar 文件")
@@ -103,16 +126,22 @@ def start_plugin() -> None:
 
         try:
             print(f"\n📦 正在处理: {file_path.name}")
-            resource = spr.import_session_resource(str(file_path), spr.Usage.SMART_MATERIAL)
+            if file_path.suffix.lower() == ".sbsar":
+                usage = spr.Usage.BASE_MATERIAL
+            elif file_path.suffix.lower() == ".sppr":
+                usage = spr.Usage.BRUSH
+            else:
+                usage = spr.Usage.SMART_MATERIAL
+            resource = spr.import_session_resource(str(file_path), usage)
             preview_file = get_new_preview(resource)
             if not preview_file:
-                print(f"❌ 未生成缩略图: {file_path.name}")
+                print(f"❌ 未生成缩略图: {file_path}")
                 skipped_files.append(file_path.name)
                 continue
             repair_webp(preview_file, output_file)
             processed_files.append(file_path.name)
         except Exception as e:
-            print(f"❌ 处理 {file_path.name} 出错: {e}")
+            print(f"❌ 处理 {file_path} 出错: {e}")
             skipped_files.append(file_path.name)
 
     QtWidgets.QMessageBox.information(
