@@ -2,6 +2,8 @@
 Substance Painter 插件
 
 批量提取 .spsm / .sbsar / .sppr 文件的缩略图
+需手动安装 libwebp
+scoop install main/libwebp
 """
 
 import shutil
@@ -54,6 +56,7 @@ def extract_single_image(zip_path: Path) -> bool:
     使用 7z 从 .sbsar (zip 格式) 文件中提取单张图片。
     仅当压缩包里有且只有一张图片时才会成功。
     """
+    #　TODO: 不要弹出控制台
     try:
         # 1. 列出压缩包内容
         result = subprocess.run(
@@ -75,7 +78,6 @@ def extract_single_image(zip_path: Path) -> bool:
                 images.append(filename)
 
         if len(images) != 1:
-            log_error(f"{zip_path} 中图片数量不是 1，而是 {len(images)}")
             return False
 
         image_file = images[0]
@@ -110,7 +112,7 @@ def extract_single_image(zip_path: Path) -> bool:
 def repair_webp(input_file_path: Path, output_file_path: Path) -> bool:
     """
     修复具有错误头偏移的 .webp 文件。
-    ! substance Painter 为.sppr 生成的 webp 文件alpha 通道有问题（可以用 libwebp 中的 webpinfo 工具检测）。
+    ! substance Painter 为.sppr / .spsmk 生成的 webp 文件alpha 通道有问题（可以用 libwebp 中的 webpinfo 工具检测）。
     ! 须用 libwebp 的 dwebp bad.webp -o fixed.png 重新导出
     """
     try:
@@ -126,6 +128,8 @@ def repair_webp(input_file_path: Path, output_file_path: Path) -> bool:
         new_data = valid_data[:4] + struct.pack("<I", new_size) + valid_data[8:]
 
         output_file_path.write_bytes(new_data)
+        # TODO: 调用 libwebp 的 dwebp 工具（已在Path中）进行修复
+
         log_info(f"修复完成: {output_file_path}")
         return True
     except Exception as e:
@@ -161,10 +165,12 @@ def get_new_preview(resource: spr.Resource, timeout: int = 10, retry: bool = Tru
 
     def try_generate():
         clear_previews()
+        #  reset_preview() 触发预览生成，TODO: 记录开始生成预览的时间
         resource.reset_preview()
         for _ in range(timeout):
             previews = get_preview_files()
             if len(previews) == 1:
+                # TODO：比较文件创建时间和 reset_preview() 的触发时间，确保是新生成的
                 return previews[0]
             if len(previews) > 1:
                 log_warn("出现多个预览文件，无法确定正确缩略图")
