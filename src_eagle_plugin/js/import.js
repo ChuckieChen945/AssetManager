@@ -206,6 +206,38 @@ function checkThumbnailDirectory(mainAssetsPath) {
     }
 }
 
+// 检查 main_assets_others 目录
+function checkmainAssetsOthersDirectory(mainAssetsPath) {
+    const parentDir = path.dirname(mainAssetsPath);
+    const othersPath = path.join(parentDir, "main_assets_others");
+    try {
+        if (!fs.existsSync(othersPath)) {
+            return { exists: false, path: null, files: [] };
+        }
+        // 递归获取所有文件（带相对路径）
+        function getAllFiles(dir, baseDir) {
+            let results = [];
+            const list = fs.readdirSync(dir);
+            for (const file of list) {
+                const filePath = path.join(dir, file);
+                const stat = fs.statSync(filePath);
+                const relPath = path.relative(baseDir, filePath);
+                if (stat && stat.isDirectory()) {
+                    results = results.concat(getAllFiles(filePath, baseDir));
+                } else {
+                    results.push(relPath);
+                }
+            }
+            return results;
+        }
+        const files = getAllFiles(othersPath, othersPath);
+        return { exists: true, path: othersPath, files };
+    } catch (error) {
+        console.error("检查 main_assets_others 目录失败:", error);
+        return { exists: false, path: null, files: [] };
+    }
+}
+
 // 导入单个main_assets文件夹
 async function importMainAssetsFolder(mainAssetsPath, index, total) {
     try {
@@ -277,7 +309,6 @@ async function importMainAssetsFolder(mainAssetsPath, index, total) {
         }
 
         // 如果有 mainAssetsPath 同级目录中有 main_assets_others 文件夹，将文件夹中的内容复制到 item 目录中
-        // TODO： checkmainAssetsOthersDirectory 函数还没写，补充这个函数
         const mainAssetsOthersInfo =
             checkmainAssetsOthersDirectory(mainAssetsPath);
         let mainAssetsOthersCopySuccess = true;
@@ -285,7 +316,7 @@ async function importMainAssetsFolder(mainAssetsPath, index, total) {
             mainAssetsOthersInfo.exists &&
             mainAssetsOthersInfo.files.length > 0
         ) {
-            // TODO：改为 将 main_assets_others 目录中的所有内容按照原本的结构原封不动地复制到 destPath 目录中
+            // 将 main_assets_others 目录中的所有内容按照原本的结构原封不动地复制到 destPath 目录中
             const destPath = path.join(
                 eagle.library.path,
                 "images",
@@ -296,11 +327,19 @@ async function importMainAssetsFolder(mainAssetsPath, index, total) {
                 if (!fs.existsSync(destPath)) {
                     fs.mkdirSync(destPath, { recursive: true });
                 }
-                for (const file of mainAssetsOthersInfo.files) {
-                    const srcFile = path.join(mainAssetsOthersInfo.path, file);
-                    const destFile = path.join(destPath, file);
+                for (const relFile of mainAssetsOthersInfo.files) {
+                    const srcFile = path.join(
+                        mainAssetsOthersInfo.path,
+                        relFile
+                    );
+                    const destFile = path.join(destPath, relFile);
+                    // 确保子目录存在
+                    const destDir = path.dirname(destFile);
+                    if (!fs.existsSync(destDir)) {
+                        fs.mkdirSync(destDir, { recursive: true });
+                    }
                     fs.copyFileSync(srcFile, destFile);
-                    addLog(`复制 main_assets_others 文件: ${file}`);
+                    addLog(`复制 main_assets_others 文件: ${relFile}`);
                 }
                 mainAssetsOthersCopySuccess = true;
             } catch (error) {
