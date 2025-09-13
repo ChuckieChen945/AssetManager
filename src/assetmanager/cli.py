@@ -114,7 +114,7 @@ def _handle_multiple(selected_items_list: list[str]) -> None:
             continue
 
         base_dir = files[0].parent
-        new_dir = base_dir / name_no_ext
+        new_dir = base_dir / name_no_ext.strip()
 
         _ensure_asset_dirs(new_dir)
         console.print(f"处理分组: {name_no_ext}")

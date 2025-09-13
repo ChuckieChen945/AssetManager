@@ -28,6 +28,7 @@ SUFFIX_USAGE_MAP = {
     ".sbsar": spr.Usage.BASE_MATERIAL,
     ".sppr": spr.Usage.BRUSH,
     ".spsm": spr.Usage.SMART_MATERIAL,
+    ".spmsk": spr.Usage.SMART_MASK,
 }
 
 plugin_widgets = []
@@ -109,6 +110,8 @@ def extract_single_image(zip_path: Path) -> bool:
 def repair_webp(input_file_path: Path, output_file_path: Path) -> bool:
     """
     修复具有错误头偏移的 .webp 文件。
+    ! substance Painter 为.sppr 生成的 webp 文件alpha 通道有问题（可以用 libwebp 中的 webpinfo 工具检测）。
+    ! 须用 libwebp 的 dwebp bad.webp -o fixed.png 重新导出
     """
     try:
         data = input_file_path.read_bytes()
@@ -189,7 +192,7 @@ def start_plugin() -> None:
     """插件启动"""
     folder = QtWidgets.QFileDialog.getExistingDirectory(
         None,
-        "选择包含 .spsm/.sbsar/.sppr 的文件夹",
+        "选择包含 .spsm/.sbsar/.sppr/ .spmsk 的文件夹",
         str(Path.home()),
     )
     if not folder:
@@ -200,6 +203,7 @@ def start_plugin() -> None:
         *folder_path.glob("**/*.spsm"),
         *folder_path.glob("**/*.sbsar"),
         *folder_path.glob("**/*.sppr"),
+        *folder_path.glob("**/*.spmsk"),
     ]
 
     if not all_files:
