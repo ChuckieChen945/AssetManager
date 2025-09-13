@@ -1,5 +1,6 @@
 """AssetManager CLI."""
 
+import requests
 import concurrent.futures
 import os
 import shutil
@@ -643,3 +644,69 @@ def process(root: Path) -> None:
 def compress(root: Path) -> None:
     """压缩 main_assets 文件夹中的内容（不包含文件夹本身）."""
     process(root)
+
+# Eagle API 本地默认地址
+BASE_URL = "http://localhost:41595/api"
+
+# 目标文件夹 ID
+TRASH_FOLDER_ID = "MFDVSSH14GC83"
+
+# 本地 Eagle library 路径
+LIBRARY_PATH = Path(r"F:\eagle_librarys\Illusion.library\images")
+
+def list_items_in_folder(folder_id):
+    """从 Eagle API 获取指定文件夹的所有项目"""
+    url = f"{BASE_URL}/item/list"
+    params = {
+        "folders": folder_id,
+        "limit": 10000,   # 如果项目超过 1000，需要做分页
+        "offset": 0
+    }
+
+    response = requests.get(url, params=params)
+    response.raise_for_status()
+    data = response.json()
+
+    if data.get("status") == "success":
+        return data.get("data", [])
+    else:
+        raise RuntimeError(f"API 返回错误: {data}")
+
+def check_item_files(items):
+    """检查每个 item 的 .info 文件夹下的文件数"""
+    problems = []
+    for item in items:
+        item_id = item.get("id")
+        info_dir = LIBRARY_PATH / f"{item_id}.info"
+
+        if not info_dir.exists():
+            problems.append((item_id, "目录不存在"))
+            continue
+
+        if not info_dir.is_dir():
+            problems.append((item_id, "不是目录"))
+            continue
+
+        try:
+            # TODO: 更严格的验证
+            files = list(info_dir.iterdir())
+            file_count = len(files)
+            if file_count != 3:
+                problems.append((item_id, f"{file_count} 个文件"))
+        except Exception as e:
+            problems.append((item_id, f"读取失败: {e}"))
+
+    return problems
+
+@app.command()
+def validate_trash_items():
+    """验证回收站目录下的项目文件夹中除了eagle本身的文件外，是否还有其它文件"""
+    items = list_items_in_folder(TRASH_FOLDER_ID)
+    problems = check_item_files(items)
+
+    if problems:
+        print("以下项目不符合要求：")
+        for item_id, issue in problems:
+            print(f"- {item_id}: {issue}")
+    else:
+        print("✅ 验证通过，所有目录都有 3 个文件")
