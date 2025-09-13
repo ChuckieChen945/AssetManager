@@ -1,3 +1,5 @@
+// 通过windows api 获取文件缩略图。已弃用。现在不通过eagle生成缩略图，而是在外部生成好缩略图，再用eagle指定custom thumbnail。
+
 const fs = require("fs");
 const path = require("path");
 const { spawn } = require("child_process");

@@ -4,27 +4,23 @@
     "platform": "all",
     "arch": "all",
     "name": "AssetManager",
-    "logo": "/src_eagle_plugin/logo.png",
-    "keywords": ["icns"],
+    "logo": "logo.png",
+    "keywords": [],
     "devTools": false,
     "preview": {
         "zprj,zpac": {
-            "thumbnail": {
-                "path": "/src_eagle_plugin/thumbnail/other_formats.js",
-                "size": 400
-            },
             "viewer": {
-                "path": "/src_eagle_plugin/viewer/other_formats.html"
+                "path": "/viewer/other_formats.html"
             }
         },
         "priv": {
             "viewer": {
-                "path": "/src_eagle_plugin/viewer/priv.html"
+                "path": "/viewer/priv.html"
             }
         }
     },
     "main": {
-        "url": "/src_eagle_plugin/index.html",
+        "url": "index.html",
         "width": 640,
         "height": 480
     }
