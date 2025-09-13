@@ -16,7 +16,6 @@ def is_image_file(filename: str) -> bool:
     return Path(filename).suffix.lower() in IMAGE_EXTENSIONS
 
 def organize_files(selected_items: list[str]) -> None:
-    from .file_organizer import _handle_single_path, _handle_multiple
     selected_items_list = list(selected_items) if selected_items is not None else []
     if not selected_items_list:
         return
@@ -37,16 +36,17 @@ def _handle_single_path(file_path: Path) -> None:
         else:
             dst_path = parent_dir / "main_assets" / file_path.name
         fast_move(str(file_path), str(dst_path))
-        if file_path.suffix.lower() in IMAGE_EXTENSIONS:
-            for path in parent_dir.iterdir():
-                if path.name not in {"thumbnail", "main_assets"}:
-                    shutil.move(str(path), str(parent_dir / "main_assets" / path.name))
+        # if file_path.suffix.lower() in IMAGE_EXTENSIONS:
+        #     for path in parent_dir.iterdir():
+        #         if path.name not in {"thumbnail", "main_assets"}:
+        #             shutil.move(str(path), str(parent_dir / "main_assets" / path.name))
     else:
         console.print(f"跳过目录: {file_path}")
 
 def _ensure_asset_dirs(base_dir: Path) -> None:
     ensure_dir(base_dir / "main_assets")
     ensure_dir(base_dir / "thumbnail")
+    ensure_dir(base_dir / "main_assets_others")
 
 def fast_move(src: str, dst: str) -> None:
     dst_path = Path(dst)

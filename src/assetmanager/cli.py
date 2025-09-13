@@ -73,7 +73,32 @@ def arrange(path: str) -> None:
 
 @app.command()
 def categorize(paths: list[Path] = typer.Argument(None)) -> None:
-    """用于快速将素材分类到 main_assets 和 thumbnail 目录中."""
+    r"""用于快速将素材分类到 main_assets 和 thumbnail 目录中.
+
+    被 categorization.bat 调用 接收单个文件/多个文件/单个文件夹
+
+    当接收单个文件时:
+    1.在当前文件夹下创建 main_assets 、 thumbnail 和 main_assets_others 三个目录
+    2.视文扩展名将文件移动到 main_assets 或 thumbnail 下
+
+    当接收多个文件时：
+    1.将所有选中的文件以文件名相同但扩展名不同两两分组，假设选中的文件为：
+    D:\\foo\\bar.png
+    D:\\foo\\bar.zprj
+    D:\\foo\\aaa.zprj
+    应分组为：
+    组一：
+    D:\\foo\\bar.png
+    D:\\foo\\bar.zprj
+    组二：
+    D:\\foo\\aaa.zprj
+    2.为每个分组创建一个目录，如上述分组应创建 D:\\foo\\bar 和 D:\\foo\\aaa 两个目录
+    3.在每个新目录中创建main_assets和thumbnails两个目录
+    4.将每个分组中的图片文件移动到thumbnails目录中，将其他文件移动到main_assets目录中
+
+    当接收单个文件夹时：
+    将文件夹中的所有文件视为多文件处理，主要是为了绕开windows向.cmd文件传递参数长度有限制的问题
+    """
     selected = paths if paths is not None else []
     dirs = [p for p in selected if p.is_dir()]
     files = [p for p in selected if p.is_file()]
@@ -86,64 +111,34 @@ def categorize(paths: list[Path] = typer.Argument(None)) -> None:
 
 @app.command()
 def validate(path: str) -> None:
-    """验证目录结构是否符合要求（分类输出，带可点击路径）。"""
-    from rich.table import Table
+    """
+    验证目录结构并按问题类型分类返回.
+
+    规则概述：
+    - 非特殊目录（非 main_assets/thumbnail/main_assets_others）：
+      - 不允许直接包含文件（文件应放入 main_assets 或 thumbnail 或 main_assets_others）
+      - 若包含了 main_assets 或 thumbnail，必须严格且仅包含这两个子目录，（可选包含main_assets_others）
+      - 若无任何子目录（叶子目录），则应包含上述两个子目录（可选包含main_assets_others）（否则判为缺失）
+    - 特殊目录：
+      - main_assets/thumbnail 不允许包含子目录
+      - main_assets 必须且仅能包含 1 个文件
+      - thumbnail 仅允许 1 个文件
+      - main_assets_others 可选且可包含多个文件
+    返回：问题分类到目录列表的映射
+    """
+
     root = Path(path)
     VIDEO_EXTENSIONS = {".mp4", ".srt", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm"}
     videos = [f for f in root.iterdir() if f.suffix.lower() in VIDEO_EXTENSIONS]
     for video in videos:
         console.print(f"❌ 目录中存在视频文件: {video}")
     report = validate_structure(root)
-    warning_keys = {"main_assets_has_subdirs"}
-    error_keys = {
-        "main_assets_multiple_files", "main_assets_empty", "thumbnail_has_subdirs", "thumbnail_multiple_files",
-        "container_has_extra_files", "incorrect_special_structure", "leaf_missing_special"
-    }
-    num_errors = sum(len(report.get(k, [])) for k in error_keys)
-    num_warnings = sum(len(report.get(k, [])) for k in warning_keys)
-    if num_errors == 0 and num_warnings == 0:
-        console.print("✅ 所有终端目录均符合要求")
-        return
-    if num_errors > 0:
-        console.print("❌ 验证未通过（存在错误）")
-    else:
-        console.print("⚠️ 验证通过但存在警告")
-    labels = [
-        ("main_assets_has_subdirs", "main_assets 中存在子目录（警告）"),
-        ("main_assets_multiple_files", "main_assets 中有多个文件"),
-        ("main_assets_empty", "main_assets 中没有文件"),
-        ("thumbnail_has_subdirs", "thumbnail 中存在子目录"),
-        ("thumbnail_multiple_files", "thumbnail 中有多个文件"),
-        ("container_has_extra_files", "非特殊目录中包含多余文件"),
-        ("incorrect_special_structure", "目录包含 main_assets/thumbnail 但结构不正确"),
-        ("leaf_missing_special", "叶子目录缺少 main_assets/thumbnail 子目录"),
-    ]
-    summary_table = Table(show_header=True, header_style="bold")
-    summary_table.add_column("级别", style="bold")
-    summary_table.add_column("数量", justify="right")
-    summary_table.add_row("错误", str(num_errors))
-    summary_table.add_row("警告", str(num_warnings))
-    console.print(summary_table)
-    def _to_file_uri(p: Path) -> str:
-        return p.resolve().as_uri()
-    for key, title in labels:
-        paths = sorted(report.get(key, []))
-        if not paths:
-            continue
-        level = "警告" if key in warning_keys else "错误"
-        table = Table(show_header=True, header_style="bold")
-        table.title = f"{title}（{level}）: {len(paths)}"
-        table.add_column("原始路径")
-        table.add_column("可点击链接（file:///）")
-        for p in paths:
-            raw_path = str(p.resolve())
-            uri = _to_file_uri(p)
-            table.add_row(raw_path, f"[link={uri}]{uri}[/link]")
-        console.print(table)
+    console.print(report)
 
 @app.command()
 def compress(root: Path) -> None:
     """压缩 main_assets 文件夹中的内容（不包含文件夹本身）."""
+    # TODO：历史遗留代码。现添加了 main_assets_others 目录，考虑还要不要压缩
     compress_main_assets(root)
 
 @app.command()
@@ -158,7 +153,28 @@ def validate_trash_items():
     else:
         print("✅ 验证通过，所有目录都有 3 个文件")
 
-@app.callback()
-def _root_callback(name: str = typer.Option(None, "--name", help="Echo helper")) -> None:
-    if name:
-        console.print(name)
+
+# TODO: 在eagle以外为".zprj", ".zpac" 生成缩略图，不通过eagle生成
+# GET_THUMBNAIL_SCRIPT_PATH = str(
+#     Path(__file__) / "../../../src_eagle_plugin/thumbnail/get_thumbnail.ps1",
+# )
+# if folder.name == "main_assets":
+#     thumbnail_folder = folder.parent / "thumbnail"
+#     thumbnail = [f for f in thumbnail_folder.iterdir() if f.is_file()]
+#     if len(thumbnail) <= 0:
+#         main_file = next(
+#             (f for f in folder.iterdir() if f.is_file() and f.suffix in {".zprj", ".zpac"}),
+#             None,
+#         )
+#         if main_file:
+#             console.print(f"为 {main_file} 生成thumbnail...")
+#             result = subprocess.run([
+#                 "pwsh.exe", "-File", GET_THUMBNAIL_SCRIPT_PATH,
+#                 "-InputFile", str(main_file),
+#                 "-OutputFile", str(thumbnail_folder / "thumbnail.png"),
+#                 "-NoProfile", "-NoLogo",
+#             ], check=False, capture_output=True, text=True)
+#             if result.returncode == 0:
+#                 print("✅ 生成成功:", result.stdout.strip())
+#             else:
+#                 print("❌ 生成失败:", result.stderr.strip())

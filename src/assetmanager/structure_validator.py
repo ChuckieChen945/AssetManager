@@ -4,9 +4,6 @@ import subprocess
 from rich.console import Console
 
 VIDEO_EXTENSIONS = {".mp4", ".srt", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm"}
-GET_THUMBNAIL_SCRIPT_PATH = str(
-    Path(__file__) / "../../../src_eagle_plugin/thumbnail/get_thumbnail.ps1",
-)
 console = Console()
 
 def validate_structure(root: Path) -> dict[str, list[Path]]:
@@ -16,6 +13,7 @@ def validate_structure(root: Path) -> dict[str, list[Path]]:
         "main_assets_empty": [],
         "thumbnail_has_subdirs": [],
         "thumbnail_multiple_files": [],
+        "thumbnail_empty": [],
         "container_has_extra_files": [],
         "incorrect_special_structure": [],
         "leaf_missing_special": [],
@@ -28,26 +26,7 @@ def validate_structure(root: Path) -> dict[str, list[Path]]:
         subdirs = [d for d in folder.iterdir() if d.is_dir()]
         files = [f for f in folder.iterdir() if f.is_file()]
         subdir_names = {d.name for d in subdirs}
-        if folder.name == "main_assets":
-            thumbnail_folder = folder.parent / "thumbnail"
-            thumbnail = [f for f in thumbnail_folder.iterdir() if f.is_file()]
-            if len(thumbnail) <= 0:
-                main_file = next(
-                    (f for f in folder.iterdir() if f.is_file() and f.suffix in {".zprj", ".zpac"}),
-                    None,
-                )
-                if main_file:
-                    console.print(f"为 {main_file} 生成thumbnail...")
-                    result = subprocess.run([
-                        "pwsh.exe", "-File", GET_THUMBNAIL_SCRIPT_PATH,
-                        "-InputFile", str(main_file),
-                        "-OutputFile", str(thumbnail_folder / "thumbnail.png"),
-                        "-NoProfile", "-NoLogo",
-                    ], check=False, capture_output=True, text=True)
-                    if result.returncode == 0:
-                        print("✅ 生成成功:", result.stdout.strip())
-                    else:
-                        print("❌ 生成失败:", result.stderr.strip())
+        # 1. 检查特殊目录
         if folder.name in {"main_assets", "thumbnail"}:
             if subdirs:
                 if folder.name == "main_assets":
@@ -59,16 +38,23 @@ def validate_structure(root: Path) -> dict[str, list[Path]]:
                     categories["main_assets_multiple_files"].append(folder)
                 else:
                     categories["thumbnail_multiple_files"].append(folder)
-            if folder.name == "main_assets" and len(files) + len(subdirs) == 0:
-                categories["main_assets_empty"].append(folder)
+            if len(files) + len(subdirs) == 0:
+                if folder.name == "main_assets":
+                    categories["main_assets_empty"].append(folder)
+                else:
+                    categories["thumbnail_empty"].append(folder)
             continue
-        if _is_under_directory(folder, "main_assets"):
+        # main_assets_others 中允许任意文件和子目录，这里跳过main_assets_others中的目录的检查
+        if _is_under_directory(folder, "main_assets_others"):
             continue
+        # 2. 如果不是特殊目录，检查是否包含多余文件
         if files:
             categories["container_has_extra_files"].append(folder)
-        expected = {"main_assets", "thumbnail"}
+        # 3. 如果不是特殊目录，且包含 main_assets 或 thumbnail，检查其结构是否正确
+        expected1 = {"main_assets", "thumbnail"}
+        expected2 = {"main_assets", "thumbnail", "main_assets_others"}
         if ("main_assets" in subdir_names) or ("thumbnail" in subdir_names):
-            if subdir_names != expected:
+            if subdir_names not in (expected1, expected2):
                 categories["incorrect_special_structure"].append(folder)
         if not subdirs:
             categories["leaf_missing_special"].append(folder)
