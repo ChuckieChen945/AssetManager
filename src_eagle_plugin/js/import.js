@@ -277,26 +277,46 @@ async function importMainAssetsFolder(mainAssetsPath, index, total) {
         }
 
         // 如果有 mainAssetsPath 同级目录中有 main_assets_others 文件夹，将文件夹中的内容复制到 item 目录中
+        // TODO： checkmainAssetsOthersDirectory 函数还没写，补充这个函数
         const mainAssetsOthersInfo =
             checkmainAssetsOthersDirectory(mainAssetsPath);
-        if (thumbnailInfo.exists && thumbnailInfo.files.length > 0) {
-            // TODO:将 main_assets_others 目录中的文件复制到 destPath 目录中
+        let mainAssetsOthersCopySuccess = true;
+        if (
+            mainAssetsOthersInfo.exists &&
+            mainAssetsOthersInfo.files.length > 0
+        ) {
+            // TODO：改为 将 main_assets_others 目录中的所有内容按照原本的结构原封不动地复制到 destPath 目录中
             const destPath = path.join(
                 eagle.library.path,
                 "images",
                 `${importedItem.id}.info`
             );
+            try {
+                // 确保目标目录存在
+                if (!fs.existsSync(destPath)) {
+                    fs.mkdirSync(destPath, { recursive: true });
+                }
+                for (const file of mainAssetsOthersInfo.files) {
+                    const srcFile = path.join(mainAssetsOthersInfo.path, file);
+                    const destFile = path.join(destPath, file);
+                    fs.copyFileSync(srcFile, destFile);
+                    addLog(`复制 main_assets_others 文件: ${file}`);
+                }
+                mainAssetsOthersCopySuccess = true;
+            } catch (error) {
+                addLog(
+                    `复制 main_assets_others 文件失败: ${error.message}`,
+                    "error"
+                );
+                mainAssetsOthersCopySuccess = false;
+            }
         }
 
         // 确认导入成功且缩略图设置成功，main_assets_others复制成功 后，删除 mainAssetsPath 的 parent 文件夹（已导入成功，源文件没用了）
-        // TODO：
         // 必需同时满足：1. 素材导入成功 2. 缩略图（如有）设置成功，3. main_assets_others（如有）复制成功 , 缺一不可
-        if (thumbnailSetSuccess) {
+        if (thumbnailSetSuccess && mainAssetsOthersCopySuccess) {
             try {
                 const parentFolder = path.dirname(mainAssetsPath);
-
-                // 你的文件夹路径
-
                 const psCommand = `
 Add-Type -AssemblyName Microsoft.VisualBasic;
 [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory(
@@ -305,7 +325,6 @@ Add-Type -AssemblyName Microsoft.VisualBasic;
     [Microsoft.VisualBasic.FileIO.RecycleOption]::SendToRecycleBin
 )
 `;
-
                 exec(
                     `pwsh -NoProfile -Command "${psCommand
                         .replace(/\n/g, " ")
@@ -322,7 +341,6 @@ Add-Type -AssemblyName Microsoft.VisualBasic;
                         console.log(`完成: ${stdout}`);
                     }
                 );
-
                 console.log(`已删除源文件夹: ${parentFolder}`);
             } catch (error) {
                 addLog(
@@ -331,7 +349,10 @@ Add-Type -AssemblyName Microsoft.VisualBasic;
                 );
             }
         } else {
-            addLog(`跳过删除源文件夹：缩略图设置失败`, "warning");
+            addLog(
+                `跳过删除源文件夹：缩略图或main_assets_others复制失败`,
+                "warning"
+            );
         }
 
         // 更新进度
