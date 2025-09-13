@@ -220,10 +220,8 @@ async function importMainAssetsFolder(mainAssetsPath, index, total) {
         }
 
         if (files.length > 1) {
-            addLog(
-                `警告: ${mainAssetsPath} 目录包含多个文件，只导入第一个`,
-                "warning"
-            );
+            addLog(`警告: ${mainAssetsPath} 目录包含多个文件!`, "warning");
+            return;
         }
 
         const assetFile = files[0];
@@ -278,8 +276,21 @@ async function importMainAssetsFolder(mainAssetsPath, index, total) {
             }
         }
 
-        // 确认导入成功且缩略图设置成功后，删除 mainAssetsPath 的 parent 文件夹（已导入成功，源文件没用了）
-        // 必需同时满足：1. 素材导入成功 2. 缩略图（如有）设置成功，两者缺一不可
+        // 如果有 mainAssetsPath 同级目录中有 main_assets_others 文件夹，将文件夹中的内容复制到 item 目录中
+        const mainAssetsOthersInfo =
+            checkmainAssetsOthersDirectory(mainAssetsPath);
+        if (thumbnailInfo.exists && thumbnailInfo.files.length > 0) {
+            // TODO:将 main_assets_others 目录中的文件复制到 destPath 目录中
+            const destPath = path.join(
+                eagle.library.path,
+                "images",
+                `${importedItem.id}.info`
+            );
+        }
+
+        // 确认导入成功且缩略图设置成功，main_assets_others复制成功 后，删除 mainAssetsPath 的 parent 文件夹（已导入成功，源文件没用了）
+        // TODO：
+        // 必需同时满足：1. 素材导入成功 2. 缩略图（如有）设置成功，3. main_assets_others（如有）复制成功 , 缺一不可
         if (thumbnailSetSuccess) {
             try {
                 const parentFolder = path.dirname(mainAssetsPath);
@@ -378,9 +389,6 @@ async function startBatchImport() {
                 i,
                 mainAssetsFolders.length
             );
-
-            // 添加小延迟避免过快处理
-            // await new Promise((resolve) => setTimeout(resolve, 100));
         }
 
         showStatus(
