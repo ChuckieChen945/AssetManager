@@ -1,10 +1,12 @@
-from pathlib import Path
 import shutil
 import subprocess
+from pathlib import Path
+
 from rich.console import Console
 
 VIDEO_EXTENSIONS = {".mp4", ".srt", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm"}
 console = Console()
+
 
 def validate_structure(root: Path) -> dict[str, list[Path]]:
     categories: dict[str, list[Path]] = {
@@ -18,8 +20,10 @@ def validate_structure(root: Path) -> dict[str, list[Path]]:
         "incorrect_special_structure": [],
         "leaf_missing_special": [],
     }
+
     def _is_under_directory(path: Path, ancestor_dir_name: str) -> bool:
         return any(parent.name == ancestor_dir_name for parent in path.parents)
+
     for folder in root.rglob("*"):
         if folder.is_file():
             continue
@@ -48,7 +52,7 @@ def validate_structure(root: Path) -> dict[str, list[Path]]:
         if _is_under_directory(folder, "main_assets_others"):
             continue
         # 2. 如果不是特殊目录，检查是否包含多余文件
-        if files:
+        if files and folder.name != "main_assets_others":
             categories["container_has_extra_files"].append(folder)
         # 3. 如果不是特殊目录，且包含 main_assets 或 thumbnail，检查其结构是否正确
         expected1 = {"main_assets", "thumbnail"}
@@ -56,15 +60,17 @@ def validate_structure(root: Path) -> dict[str, list[Path]]:
         if ("main_assets" in subdir_names) or ("thumbnail" in subdir_names):
             if subdir_names not in (expected1, expected2):
                 categories["incorrect_special_structure"].append(folder)
-        if not subdirs:
+        if not subdirs and folder.name != "main_assets_others":
             categories["leaf_missing_special"].append(folder)
     return categories
+
 
 def fix_duplicate_named_dirs(path: Path) -> None:
     for dir in sorted(path.rglob("*"), reverse=True):
         if dir.is_dir() and dir.parent.name == dir.name:
             console.print(f"发现重复目录: {dir}")
             merge_directories(dir, dir.parent)
+
 
 def merge_directories(src_dir: Path, dst_dir: Path) -> None:
     dst_dir.mkdir(parents=True, exist_ok=True)
@@ -83,6 +89,7 @@ def merge_directories(src_dir: Path, dst_dir: Path) -> None:
     if not any(src_dir.iterdir()):
         src_dir.rmdir()
         console.print(f"🗑️ 删除空目录: {src_dir}")
+
 
 def move_file_with_check(src_file: Path, dst_dir: Path) -> None:
     dst_file = dst_dir / src_file.name
@@ -106,6 +113,7 @@ def move_file_with_check(src_file: Path, dst_dir: Path) -> None:
         shutil.move(str(src_file), str(dst_file))
         console.print(f"移动文件: {src_file.name}")
 
+
 def delete_useless_files_and_dirs(path: Path) -> None:
     for dir in path.rglob("*"):
         if dir.is_dir() and (dir.name == "__MACOSX" or dir.name == ".alg_meta"):
@@ -117,6 +125,7 @@ def delete_useless_files_and_dirs(path: Path) -> None:
     for file in path.rglob(".DS_Store"):
         console.print(f"🗑️ 删除无用文件: {file}")
         file.unlink(missing_ok=True)
+
 
 def delete_empty_dirs(path: Path) -> None:
     for dir in sorted(path.rglob("*"), reverse=True):

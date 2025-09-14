@@ -11,8 +11,6 @@ import struct
 import subprocess
 import time
 from pathlib import Path
-import zipfile
-import logging
 
 import substance_painter.resource as spr
 import substance_painter.ui
@@ -38,6 +36,7 @@ plugin_widgets = []
 
 
 # ================== 日志工具 ==================
+
 
 def log_info(msg: str) -> None:
     print(f"✅ {msg}")
@@ -70,7 +69,7 @@ def extract_single_image(zip_path: Path) -> bool:
             capture_output=True,
             text=True,
             check=True,
-            creationflags=subprocess.CREATE_NO_WINDOW
+            creationflags=subprocess.CREATE_NO_WINDOW,
         )
         output = result.stdout
         images = []
@@ -91,7 +90,7 @@ def extract_single_image(zip_path: Path) -> bool:
             check=True,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            creationflags=subprocess.CREATE_NO_WINDOW
+            creationflags=subprocess.CREATE_NO_WINDOW,
         )
         # 3. 重命名为和 zip 一致的文件名
         extracted_file = zip_path.parent / Path(image_file).name
@@ -123,17 +122,17 @@ def repair_webp(input_file_path: Path, output_file_path: Path) -> bool:
         # 调用 dwebp 修复
         result = subprocess.run(
             ["dwebp", str(temp_webp), "-o", str(output_file_path.with_suffix(".png"))],
+            check=False,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            creationflags=subprocess.CREATE_NO_WINDOW
+            creationflags=subprocess.CREATE_NO_WINDOW,
         )
         temp_webp.unlink(missing_ok=True)
         if result.returncode == 0:
             log_info(f"修复完成: {output_file_path.with_suffix('.png')}")
             return True
-        else:
-            log_error(f"dwebp 修复失败: {input_file_path}")
-            return False
+        log_error(f"dwebp 修复失败: {input_file_path}")
+        return False
     except Exception as e:
         log_error(f"修复失败 {input_file_path}: {e}")
         return False
@@ -153,7 +152,7 @@ def clear_previews() -> None:
             log_warn(f"删除预览文件失败 {f}: {e}")
 
 
-def get_new_preview(resource: spr.Resource, timeout: int = 10, retry: bool = True) -> Path | None:
+def get_new_preview(resource: spr.Resource, timeout: int = 20, retry: bool = True) -> Path | None:
     """
     在预览目录中查找生成的缩略图。
     比较文件创建时间，确保是新生成的。
@@ -175,9 +174,8 @@ def get_new_preview(resource: spr.Resource, timeout: int = 10, retry: bool = Tru
                 ctime = preview.stat().st_ctime
                 if ctime >= start_time:
                     return preview
-                else:
-                    log_warn(f"预览文件时间早于触发时间，忽略: {preview}")
-                    return None
+                log_warn(f"预览文件时间早于触发时间，忽略: {preview}")
+                return None
             if len(previews) > 1:
                 log_warn("出现多个预览文件，无法确定正确缩略图")
                 return None

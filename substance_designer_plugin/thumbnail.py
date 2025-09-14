@@ -1,14 +1,12 @@
-# -*- coding: utf-8 -*-
 """为指定目录下的所有 .sbs 文件生成缩略图.
 
 在 substance designer python 编辑器中运行
 """
 
-import os
-import subprocess
-import shutil
-import tempfile
 import logging
+import shutil
+import subprocess
+import tempfile
 from pathlib import Path
 
 import sd
@@ -45,7 +43,7 @@ def run_7z_extract(sbsar_path: Path, output_dir: Path) -> bool:
         print(f"[成功] 解压完成: {sbsar_path}")
         return True
     except subprocess.CalledProcessError as e:
-        logging.error("解压失败: %s (%s)", sbsar_path, e)
+        logging.exception("解压失败: %s (%s)", sbsar_path, e)
         print(f"[失败] 解压出错: {sbsar_path}")
         return False
 
@@ -90,7 +88,7 @@ def export_sbs_to_sbsar(sbs_file: Path, target: Path) -> None:
     try:
         exporter.exportSBSFileToSBSAR(str(sbs_file), str(target))
     except BaseException as e:
-        logging.error("导出失败: %s (%s)", sbs_file, e)
+        logging.exception("导出失败: %s (%s)", sbs_file, e)
         print(f"[失败] 导出出错: {sbs_file.name}")
         return
     logging.info("已导出 %s", target.name)
