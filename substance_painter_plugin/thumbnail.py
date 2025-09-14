@@ -41,17 +41,17 @@ plugin_widgets = []
 
 def log_info(msg: str) -> None:
     print(f"✅ {msg}")
-    logging.info(msg)
+    # logging.info(msg)
 
 
 def log_warn(msg: str) -> None:
     print(f"⚠️ {msg}")
-    logging.warning(msg)
+    # logging.warning(msg)
 
 
 def log_error(msg: str) -> None:
     print(f"❌ {msg}")
-    logging.error(msg)
+    # logging.error(msg)
 
 
 # ================== 工具函数 ==================
@@ -171,7 +171,8 @@ def get_new_preview(resource: spr.Resource, timeout: int = 10, retry: bool = Tru
             if len(previews) == 1:
                 preview = previews[0]
                 # 检查文件创建时间
-                ctime = preview.stat().st_birthtime
+                # substance painter 的python版本不能用 .stat().st_birthtime
+                ctime = preview.stat().st_ctime
                 if ctime >= start_time:
                     return preview
                 else:

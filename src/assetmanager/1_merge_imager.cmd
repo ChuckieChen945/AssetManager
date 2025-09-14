@@ -1,32 +1,32 @@
-@REM ç”¨äºæ•´ç† thumbnailæ—¶å¿«é€Ÿåˆå¹¶å›¾ç‰‡
-@REM éœ€è¦å®‰è£… ImageMagick: scoop install main/ImageMagick
+@REM ÓÃÓÚÕûÀí thumbnailÊ±¿ìËÙºÏ²¢Í¼Æ¬
+@REM ĞèÒª°²×° ImageMagick: scoop install main/ImageMagick
 
 @echo off
 setlocal enabledelayedexpansion
 
-REM æ£€æŸ¥æ˜¯å¦ä¼ å…¥å‚æ•°
+REM ¼ì²éÊÇ·ñ´«Èë²ÎÊı
 if "%~1"=="" (
-    echo è¯·æŠŠå›¾ç‰‡æ‹–åˆ°æœ¬è„šæœ¬ä¸Šä½¿ç”¨ï¼
+    echo Çë°ÑÍ¼Æ¬ÍÏµ½±¾½Å±¾ÉÏÊ¹ÓÃ£¡
     pause
     exit /b
 )
 
-REM ç»Ÿè®¡ä¼ å…¥çš„å›¾ç‰‡æ•°é‡
+REM Í³¼Æ´«ÈëµÄÍ¼Æ¬ÊıÁ¿
 set count=0
 for %%i in (%*) do (
     set /a count+=1
 )
 
-REM è®¡ç®—åˆ—æ•° = floor(sqrt(count))
+REM ¼ÆËãÁĞÊı = floor(sqrt(count))
 for /f "tokens=1" %%i in ('powershell -command "[math]::Floor([math]::Sqrt(%count%))"') do set cols=%%i
 if %cols% lss 1 set cols=1
 
-REM è¾“å‡ºæ–‡ä»¶åï¼ˆå¸¦æ—¶é—´æˆ³ï¼‰
+REM Êä³öÎÄ¼şÃû£¨´øÊ±¼ä´Á£©
 set output=montage_%date:~0,4%%date:~5,2%%date:~8,2%_%time:~0,2%%time:~3,2%%time:~6,2%.jpg
 set output=%output: =0%
 
-REM è°ƒç”¨ ImageMagick montage
+@REM µ÷ÓÃ ImageMagick montage
 montage %* -geometry +0+0 -tile %cols%x -background none "%output%"
 
-echo æ‹¼å›¾å®Œæˆï¼è¾“å‡ºæ–‡ä»¶ï¼š%output%
-pause
+echo Æ´Í¼Íê³É£¡Êä³öÎÄ¼ş£º%output%
+@REM pause

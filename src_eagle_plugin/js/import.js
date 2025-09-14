@@ -408,6 +408,7 @@ async function startBatchImport() {
         return;
     }
 
+    selectedPath = document.getElementById("rootPath").value;
     if (!selectedPath) {
         showStatus("请先选择根目录路径", "error");
         return;
