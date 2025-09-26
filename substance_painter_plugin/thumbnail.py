@@ -2,8 +2,9 @@
 Substance Painter 插件
 
 批量提取 .spsm / .sbsar / .sppr 文件的缩略图
-需手动安装 libwebp
+需手动安装:
 scoop install main/libwebp
+scoop install hoilc_scoop-lemon/binwalk
 """
 
 import shutil
@@ -19,14 +20,17 @@ from PySide6 import QtWidgets
 # ================== 常量配置 ==================
 
 # 支持的图片扩展名
-IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".webp"}
+IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".webp", ".riff"}
 
 # Substance Painter 预览目录
 PREVIEW_DIR = Path.home() / "AppData/Roaming/Adobe/Adobe Substance 3D Painter/previews"
 
 # 文件后缀与对应的 usage 类型
 SUFFIX_USAGE_MAP = {
-    ".sbsar": spr.Usage.BASE_MATERIAL,
+    # TODO: 为sbsar 尝试多种usage
+    # ".sbsar": spr.Usage.BASE_MATERIAL,
+    ".sbsar": spr.Usage.PROCEDURAL,
+    # ".sbsar": spr.Usage.FILTER,  # 也可以作为滤镜导入
     ".sppr": spr.Usage.BRUSH,
     ".spsm": spr.Usage.SMART_MATERIAL,
     ".spmsk": spr.Usage.SMART_MASK,
@@ -56,6 +60,54 @@ def log_error(msg: str) -> None:
 # ================== 工具函数 ==================
 
 
+def extract_sppr(sppr_path: Path) -> bool:
+    """
+    从 .sppr 文件中提取缩略图。
+    使用 binwalk 提取文件后，选出最小的一张图片，重命名为 .web。
+    """
+    try:
+        # 1. 创建临时目录用于 binwalk 提取
+        extract_dir = sppr_path.parent / f"_{sppr_path.stem}_extracted"
+        if extract_dir.exists():
+            shutil.rmtree(extract_dir)
+        extract_dir.mkdir(parents=True, exist_ok=True)
+
+        # 2. 用 binwalk 提取
+        subprocess.run(
+            ["binwalk", "--extract", "--directory", str(extract_dir), str(sppr_path)],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            creationflags=subprocess.CREATE_NO_WINDOW,
+        )
+
+        # 3. 收集所有图片文件
+        images = [p for p in extract_dir.rglob("*") if p.suffix.lower() in IMAGE_EXTS]
+
+        if not images:
+            log_error(f"未找到图片: {sppr_path}")
+            return False
+
+        # 4. 选出文件大小最小的一张
+        smallest_img = min(images, key=lambda p: p.stat().st_size)
+
+        # 5. 输出路径（同名 .web）
+        output_path = sppr_path.with_suffix(".webp")
+
+        # 6. 复制到目标目录
+        shutil.copy2(smallest_img, output_path)
+
+        log_info(f"已提取缩略图到: {output_path}")
+        return True
+    except Exception as e:
+        log_error(f"提取失败 {sppr_path}: {e}")
+        return False
+    finally:
+        # 7. 清理临时目录
+        if "extract_dir" in locals() and extract_dir.exists():
+            shutil.rmtree(extract_dir, ignore_errors=True)
+
+
 def extract_single_image(zip_path: Path) -> bool:
     """
     使用 7z 从 .sbsar (zip 格式) 文件中提取单张图片。
@@ -75,7 +127,7 @@ def extract_single_image(zip_path: Path) -> bool:
         images = []
         for line in output.splitlines():
             parts = line.strip().split()
-            if len(parts) < 6:
+            if len(parts) < 2:
                 continue
             filename = parts[-1]
             if Path(filename).suffix.lower() in IMAGE_EXTS:
@@ -214,6 +266,12 @@ def start_plugin() -> None:
         *folder_path.glob("**/*.sbsar"),
         *folder_path.glob("**/*.sppr"),
         *folder_path.glob("**/*.spmsk"),
+        *folder_path.glob("**/*.pkfx"),
+        *folder_path.glob("**/*.spexp"),
+        # *folder_path.glob("**/*.abr"),
+        # *folder_path.glob("**/*.qml"),
+        # *folder_path.glob("**/*.glsl"),
+        # *folder_path.glob("**/*.spt"),
     ]
 
     if not all_files:
@@ -232,6 +290,12 @@ def start_plugin() -> None:
             log_info(f"📦 正在处理: {file_path.name}")
 
             if file_path.suffix.lower() == ".sbsar" and extract_single_image(file_path):
+                processed.append(file_path.name)
+                continue
+
+            if (
+                file_path.suffix.lower() == ".sppr" or file_path.suffix == ".spmsk"
+            ) and extract_sppr(file_path):
                 processed.append(file_path.name)
                 continue
 
