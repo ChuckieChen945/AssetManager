@@ -9,6 +9,9 @@ from .structure_validator import (
 )
 from .compressor import process as compress_main_assets
 from .eagle_api import list_items_in_folder, check_item_files, TRASH_FOLDER_ID
+from pathlib import Path
+from PIL import Image
+import subprocess
 
 console = Console()
 app = typer.Typer()
@@ -152,6 +155,80 @@ def validate_trash_items():
             print(f"- {item_id}: {issue}")
     else:
         print("✅ 验证通过，所有目录都有 3 个文件")
+
+@app.command()
+def merge_images(paths: list[Path] = typer.Argument(None)) -> None:
+    """合并 main_assets 文件夹中的图片文件为一个图片文件."""
+    from .merge_images import create_thumbnail_montage
+    create_thumbnail_montage(paths)
+
+@app.command()
+def set_private_images(path: Path) -> None:
+    """
+    遍历文件夹中的所有图片
+    对每张图片，生成缩略图
+    将原图用7zip压缩为7z格式，放到 原图片名/main_assets中
+    将缩略图放到 原图片名/thumbnail 中
+    将原图片删除
+    """
+    # 支持的图片格式
+    from .file_organizer import is_image_file
+
+    for img_path in path.glob("*"):
+        if not is_image_file(str(img_path)):
+            continue
+
+        print(f"Processing: {img_path.name}")
+
+        # 创建相关文件夹
+        base_name = img_path.stem
+        main_assets_dir = path / base_name / "main_assets"
+        thumbnail_dir = path / base_name / "thumbnail"
+        main_assets_dir.mkdir(parents=True, exist_ok=True)
+        thumbnail_dir.mkdir(parents=True, exist_ok=True)
+
+        # 生成缩略图
+        try:
+            with Image.open(img_path) as img:
+                width, height = img.size
+                aspect_ratio = width / height
+
+                # 根据图片方向设置缩放尺寸
+                if aspect_ratio > 1:  # 横图
+                    new_width = 512
+                    new_height = int(512 / aspect_ratio)
+                else:  # 竖图或方图
+                    new_height = 512
+                    new_width = int(512 * aspect_ratio)
+
+                img.thumbnail((new_width, new_height))
+                thumbnail_path = thumbnail_dir / img_path.name
+                img.save(thumbnail_path)
+                print(f"Thumbnail saved to: {thumbnail_path}")
+        except Exception as e:
+            print(f"❌ Error creating thumbnail for {img_path}: {e}")
+            continue
+
+        # 压缩原图为 7z
+        try:
+            output_7z = main_assets_dir / f"{img_path.stem}.7z"
+            subprocess.run(
+                ["7z", "a", str(output_7z), str(img_path)],
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+            print(f"Compressed to: {output_7z}")
+        except subprocess.CalledProcessError as e:
+            print(f"❌ 7z compression failed for {img_path}: {e}")
+            continue
+
+        # 删除原图
+        try:
+            img_path.unlink()
+            print(f"Deleted original: {img_path}")
+        except Exception as e:
+            print(f"❌ Error deleting {img_path}: {e}")
 
 
 # TODO: 在eagle以外为".zprj", ".zpac" 生成缩略图，不通过eagle生成
