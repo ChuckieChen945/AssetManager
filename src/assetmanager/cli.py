@@ -174,7 +174,12 @@ def set_private_images(path: Path) -> None:
     # 支持的图片格式
     from .file_organizer import is_image_file
 
-    for img_path in path.glob("*"):
+    image_files = [
+        p for p in path.rglob("*")
+        if is_image_file(str(p)) and "thumbnail" not in p.parts and "main_assets" not in p.parts
+    ]
+
+    for img_path in image_files:
         if not is_image_file(str(img_path)):
             continue
 
@@ -182,8 +187,8 @@ def set_private_images(path: Path) -> None:
 
         # 创建相关文件夹
         base_name = img_path.stem
-        main_assets_dir = path / base_name / "main_assets"
-        thumbnail_dir = path / base_name / "thumbnail"
+        main_assets_dir = img_path.parent / base_name / "main_assets"
+        thumbnail_dir = img_path.parent / base_name / "thumbnail"
         main_assets_dir.mkdir(parents=True, exist_ok=True)
         thumbnail_dir.mkdir(parents=True, exist_ok=True)
 
@@ -211,7 +216,7 @@ def set_private_images(path: Path) -> None:
 
         # 压缩原图为 7z
         try:
-            output_7z = main_assets_dir / f"{img_path.stem}.7z"
+            output_7z = main_assets_dir / f"{img_path.stem}.priv"
             subprocess.run(
                 ["7z", "a", str(output_7z), str(img_path)],
                 check=True,
