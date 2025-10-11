@@ -12,7 +12,11 @@ authors = [
 ]
 requires-python = ">=3.12,<4.0"
 dependencies = [
+  "dotenv>=0.9.9",
+  "eaglewrapper>=1.1.1",
   "jsonschema>=4.25.0",
+  "long-sword",
+  "openai>=2.3.0",
   "pillow>=11.3.0",
   "poethepoet (>=0.32.1)",
   "requests>=2.32.5",
@@ -160,3 +164,6 @@ type = "simple"
 
     [[tool.poe.tasks.test.sequence]]
     cmd = "coverage xml"
+
+[tool.uv.sources]
+long-sword = { path = "../long_sword", editable = true }
