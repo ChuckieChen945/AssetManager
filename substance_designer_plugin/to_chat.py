@@ -1,14 +1,11 @@
-"""
-逐个打开一系列.sbs文件，对每个.sbs文件收集其中节点的标签，保存到同名的json文件中
-"""
-
-import sd
 import os
 import json
+from pathlib import Path
+from long_sword.openai_customized import ask_openai
 
 input_folders = [
 # "F:\\eagle_librarys\\Illusion.library\\images\\MFZ90JWJ32LZ2.info",
-"F:\\eagle_librarys\\Illusion.library\\images\\MFM95T7TRARR6.info",
+# "F:\\eagle_librarys\\Illusion.library\\images\\MFM95T7TRARR6.info",
 "F:\\eagle_librarys\\Illusion.library\\images\\MFM95SOZ066LY.info",
 "F:\\eagle_librarys\\Illusion.library\\images\\MFM95S7MWJNZY.info",
 "F:\\eagle_librarys\\Illusion.library\\images\\MFM95RPZGH785.info",
@@ -697,54 +694,35 @@ input_folders = [
 "F:\\eagle_librarys\\Illusion.library\\images\\MFGUMSVSJB7NY.info",
 ]
 
-# 获取上下文
-ctx = sd.getContext()
-app = ctx.getSDApplication()
-sdMgr = app.getPackageMgr()
 
 for input_folder in input_folders:
-    # 遍历目录中的所有 .sbs 文件
-    for file_name in os.listdir(input_folder):
-        if not file_name.lower().endswith(".sbs"):
-            continue
-
-        sbs_path = os.path.join(input_folder, file_name)
+    # 用 pathlib 找出所有 .sbs 文件
+    sbs_files = Path(input_folder).glob("*.sbs")
+    json_files = Path(input_folder).glob("*.json")
+    for sbs_path in sbs_files:
         print(f"📂 正在处理文件：{sbs_path}")
+        for json_path in json_files:
+            if (json_path.stem).startswith(sbs_path.stem) and (not json_path.with_suffix('.md').exists()):
+                print(f"   🔍 处理 JSON 文件：{json_path}")
+                # 读取 JSON 文件内容
+                with open(json_path, 'r', encoding='utf-8') as json_file:
+                    json_data = json_file.read()
+                if json_data.find('Legacy') != -1:
+                    prompt = f"""
+    这是一个 Substance Designer 项目中用到的一些节点，简要解释每个节点的用途。如果是Legacy节点，请说明应该用什么新节点代替：
 
-        # 打开 .sbs 包
-        pkg = sdMgr.loadUserPackage(sbs_path)
-        if pkg is None:
-            print(f"⚠️ 无法打开：{sbs_path}")
-            continue
+    {json_data}
+    """
+                else:
+                    prompt = f"""
+    这是一个 Substance Designer 项目中用到的一些节点，简要解释每个节点的用途：
 
-        # 遍历包内的所有图（graph）
-        for resource in pkg.getChildrenResources(True):
-            if "Graph" in resource.getClassName():
-                graph = resource
-                node_labels = set()
-
-                # 遍历图内的节点
-                for node in graph.getNodes():
-                    definition = node.getDefinition()
-                    if definition is not None:
-                        label = definition.getLabel()
-                        if label:
-                            node_labels.add(label)
-
-                # 转为列表以便导出 JSON
-                unique_labels = sorted(list(node_labels))
-
-                # 输出 JSON 文件路径：使用 sbs 文件名 + 图名
-                base_name = os.path.splitext(file_name)[0]
-                graph_name = graph.getIdentifier()  # 或 graph.getLabel()
-                output_path = os.path.join(input_folder, f"{base_name}_{graph_name}.json")
-
-                # 导出 JSON 文件
-                with open(output_path, "w", encoding="utf-8") as f:
-                    json.dump(unique_labels, f, indent=4, ensure_ascii=False)
-
-                print(f"✅ {file_name} - {graph_name}：共收集到 {len(unique_labels)} 个唯一节点标签，已导出到：{output_path}")
-
-        sdMgr.unloadUserPackage(pkg)
+    {json_data}
+    """
+                response = ask_openai(prompt=prompt)
+                # 将回答写入到新的 Markdown 文件中
+                md_path = json_path.with_suffix('.md')
+                with open(md_path, 'w', encoding='utf-8') as md_file:
+                    md_file.write(response)
 
 print("🎉 全部文件处理完成。")
