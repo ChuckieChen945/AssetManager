@@ -1,3 +1,8 @@
+"""
+导出 Substance Designer 图节点和连接信息
+在substance designer中运行
+"""
+
 import sd
 import json
 from sd.api.sdproperty import SDPropertyCategory
