@@ -2,31 +2,29 @@ import sd
 import json
 from sd.api.sdproperty import SDPropertyCategory
 
-# 获取应用上下文
+# 获取上下文
 ctx = sd.getContext()
 app = ctx.getSDApplication()
 uiMgr = app.getQtForPythonUIMgr()
 
-# 获取当前图
+# 获取当前打开的图
 graph = uiMgr.getCurrentGraph()
 if graph is None:
-    print("没有打开的图")
+    print("没有打开的图。")
     exit()
 
-# 准备节点信息列表
-nodes_data = []
+graph_data = {}
 
-# 遍历图中所有节点
 for node in graph.getNodes():
+    node_id = node.getIdentifier()
+    node_label = node.getDefinition().getLabel()
+
     node_info = {
-        "id": node.getIdentifier(),           # 节点唯一标识
-        "name": node.getDefinition().getLabel(),  # 节点类型名称
-        # "position": {"x": node.getPos().x, "y": node.getPos().y},  # 节点在图中的位置
-        "inputs": [],                           # 输入连接
-        "outputs": []                           # 输出连接
+        "type": node_label,
     }
 
-    # 遍历节点的输入端口
+    # 输入连接
+    inputs = {}
     for input_plug in node.getProperties(SDPropertyCategory.Input):
         connections = []
         for conn in node.getPropertyConnections(input_plug):
@@ -34,16 +32,14 @@ for node in graph.getNodes():
             source_output = conn.getOutputProperty()
             if source_node and source_output:
                 connections.append({
-                    "source_node_id": source_node.getIdentifier(),
-                    "source_output": source_output.getId()
+                    "node": source_node.getIdentifier(),
+                    "output": source_output.getId()
                 })
         if connections:
-            node_info["inputs"].append({
-                "plug_name": input_plug.getId(),
-                "connections": connections
-            })
+            inputs[input_plug.getId()] = connections
 
-    # 遍历节点的输出端口
+    # 输出连接
+    outputs = {}
     for output_plug in node.getProperties(SDPropertyCategory.Output):
         connections = []
         for conn in node.getPropertyConnections(output_plug):
@@ -51,19 +47,22 @@ for node in graph.getNodes():
             target_input = conn.getInputProperty()
             if target_node and target_input:
                 connections.append({
-                    "target_node_id": target_node.getIdentifier(),
-                    "target_input": target_input.getId()
+                    "node": target_node.getIdentifier(),
+                    "input": target_input.getId()
                 })
         if connections:
-            node_info["outputs"].append({
-                "plug_name": output_plug.getId(),
-                "connections": connections
-            })
+            outputs[output_plug.getId()] = connections
 
-    nodes_data.append(node_info)
+    if inputs:
+        node_info["inputs"] = inputs
+    if outputs:
+        node_info["outputs"] = outputs
 
-# 将结果写入 JSON 文件
-with open("D:/graph_export.json", "w") as f:
-    json.dump(nodes_data, f, indent=4)
+    graph_data[node_id] = node_info
 
-print("已将图节点和连接导出为 D:/graph_export.json")
+# 导出 JSON
+output_path = "D:/graph_export.json"
+with open(output_path, "w", encoding="utf-8") as f:
+    json.dump(graph_data, f, indent=4, ensure_ascii=False)
+
+print(f"✅ 图节点和连接信息已导出到：{output_path}")
