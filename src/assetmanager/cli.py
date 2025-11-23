@@ -12,6 +12,7 @@ from .eagle_api import list_items_in_folder, check_item_files, TRASH_FOLDER_ID
 from pathlib import Path
 from PIL import Image
 import subprocess
+from long_sword.eagle import Eagle
 
 console = Console()
 app = typer.Typer()
@@ -24,7 +25,16 @@ def extract(path: str) -> None:
     from pathlib import Path
     COMPRESS_EXTENSIONS = {".zip", ".7z", ".rar"}
     def _find_archive_files(path: Path):
-        return [f for f in path.rglob("*") if f.is_file() and f.suffix.lower() in COMPRESS_EXTENSIONS]
+
+        return [
+            f for f in path.rglob("*")
+            if (
+                f.is_file()
+                and f.suffix.lower() in COMPRESS_EXTENSIONS
+                and "__MACOSX" not in f.parts
+            )
+        ]
+
     def extract_file(file: Path):
         out_dir = file.with_name(file.stem)
         if not out_dir.exists():
@@ -235,6 +245,21 @@ def set_private_images(path: Path) -> None:
         except Exception as e:
             print(f"❌ Error deleting {img_path}: {e}")
 
+@app.command()
+def git_init(folder: str) -> None:
+    """在指定目录初始化 git 仓库"""
+    eagle = Eagle()
+    for path in eagle.list_items_path(folder):
+        if not (path / ".git").exists():  # 检查是否是 git 仓库
+            print(f"初始化 Git 仓库: {path}")
+            try:
+                subprocess.run(["git", "init"], cwd=path, check=True)
+                subprocess.run(["git", "add", "-A"], cwd=path, check=True)
+                subprocess.run(["git", "commit", "-m", "init"], cwd=path, check=True)
+            except subprocess.CalledProcessError as e:
+                print(f"⚠️ 初始化失败：{path}\n{e}")
+        else:
+            print(f"已是 Git 仓库: {path}")
 
 # TODO: 在eagle以外为".zprj", ".zpac" 生成缩略图，不通过eagle生成
 # GET_THUMBNAIL_SCRIPT_PATH = str(

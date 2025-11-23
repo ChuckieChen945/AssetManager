@@ -92,7 +92,7 @@ def process_hip_folder(info_dir: Path):
     if not info_dir.exists() or not info_dir.is_dir():
         return
 
-    hip_files = list(info_dir.glob("*.hip"))
+    hip_files = list(info_dir.rglob("*.hip"))
     if not hip_files:
         log(f"❌ 未找到 HIP 文件: {info_dir}")
         return
@@ -123,11 +123,13 @@ def post_process(info_dir: Path):
 
 
 def main():
-    folder_id = "METEXKIEN5Q7P"
-    items = list_items_in_folder(folder_id)
-    for item in items:
-        item_id = item.get("id")
-        info_dir = LIBRARY_PATH / f"{item_id}.info"
+    # folder_id = "METEXKIEN5Q7P"
+    # items = list_items_in_folder(folder_id)
+    info_dirs = ["D:\\zzz_test\\solaris\\Solaris_Tutorial_Files_by_NeilWei"]
+    for info_dir in info_dirs:
+        # item_id = item.get("id")
+        # info_dir = LIBRARY_PATH / f"{item_id}.info"
+        info_dir = Path(info_dir)
         try:
             process_hip_folder(info_dir)
             post_process(info_dir)
