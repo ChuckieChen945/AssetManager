@@ -34,8 +34,8 @@ def _handle_single_path(file_path: Path) -> None:
     if not file_path.exists():
         console.print(f"错误: 文件不存在 {file_path}")
         return
-    if file_path.suffix.lower() in IMAGE_EXTENSIONS:
-        raise ValueError("单个文件时，不能是图片文件")
+    # if file_path.suffix.lower() in IMAGE_EXTENSIONS:
+    #     raise ValueError("单个文件时，不能是图片文件")
 
     if file_path.is_file():
         parent_dir = file_path.parent
@@ -44,7 +44,9 @@ def _handle_single_path(file_path: Path) -> None:
         fast_move(str(file_path), str(dst_path))
         # 如果parent_dir直接子文件下只有一张图片，把它移动到thumbnail
         image_files = [p for p in parent_dir.iterdir() if p.is_file() and is_image_file(p.name)]
-        if len(image_files) == 1:  # 只有一张图片
+        if (
+            len(image_files) == 1 and file_path.suffix.lower() not in IMAGE_EXTENSIONS
+        ):  # 只有一张图片，且当前处理的不是图片文件
             img_file = image_files[0]
             dst_img_path = parent_dir / "thumbnail" / img_file.name
             fast_move(str(img_file), str(dst_img_path))

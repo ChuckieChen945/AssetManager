@@ -1,8 +1,11 @@
 import shutil
 import subprocess
 from pathlib import Path
+from tkinter.tix import IMAGE
 
 from rich.console import Console
+
+from assetmanager.file_organizer import IMAGE_EXTENSIONS
 
 VIDEO_EXTENSIONS = {".mp4", ".srt", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm"}
 console = Console()
@@ -46,7 +49,11 @@ def validate_structure(root: Path) -> dict[str, list[Path]]:
                 if folder.name == "main_assets":
                     categories["main_assets_empty"].append(folder)
                 else:
-                    categories["thumbnail_empty"].append(folder)
+                    main_images = [
+                        f for f in (folder.parent / "main_assets").iterdir() if f.is_file()
+                    ]
+                    if main_images[0].suffix.lower() not in IMAGE_EXTENSIONS:
+                        categories["thumbnail_empty"].append(folder)
             continue
         # main_assets_others 中允许任意文件和子目录，这里跳过main_assets_others中的目录的检查
         if _is_under_directory(folder, "main_assets_others"):
